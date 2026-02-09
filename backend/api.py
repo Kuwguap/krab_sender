@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from zoneinfo import ZoneInfo
 
 from .config import ApiConfig
@@ -10,6 +11,20 @@ from .repository import get_latest_transaction, list_transactions, get_rolling_s
 NY_TZ = ZoneInfo("America/New_York")
 
 app = FastAPI(title="Krab Sender Admin API")
+
+# CORS so the Vercel admin frontend can call this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://krab-sender.vercel.app",  # your Vercel admin URL
+        "https://krabsender.vercel.app",   # if using this alias
+        "http://127.0.0.1:8000",           # local dev
+        "http://localhost:8000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def get_api_config() -> ApiConfig:
@@ -101,6 +116,18 @@ def weekly_previous_summary():
     and can also be triggered manually at any time.
     """
     return get_rolling_summary_ny(days=7)
+
+
+# Explicit OPTIONS handlers so browser CORS preflight succeeds from Vercel
+@app.options("/transactions")
+def options_transactions():
+    # CORSMiddleware will add the appropriate CORS headers.
+    return {}
+
+
+@app.options("/transactions/latest")
+def options_transactions_latest():
+    return {}
 
 
 # Serve a simple static admin dashboard at /admin
