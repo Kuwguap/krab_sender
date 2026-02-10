@@ -114,6 +114,22 @@ def recipients_public():
     ]
 
 
+@app.get("/recipients/{recipient_id}/email")
+def recipient_email_public(recipient_id: str):
+    """
+    Public endpoint to get recipient email by ID (for bot to send emails).
+    Returns only the email address for the given recipient ID.
+    """
+    recipient = get_recipient_by_id(recipient_id)
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    return {
+        "id": recipient["id"],
+        "name": recipient["name"],
+        "email": recipient["email"],
+    }
+
+
 @app.get("/transactions/latest", dependencies=[Depends(require_admin)])
 def transactions_latest():
     """

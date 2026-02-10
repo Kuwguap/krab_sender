@@ -186,15 +186,14 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
 
     try:
         async with httpx.AsyncClient() as client:
-            # Fetch all recipients to find the one we need
-            response = await client.get(f"{bot_config.api_base_url}/recipients")
+            # Fetch recipient email by ID
+            response = await client.get(f"{bot_config.api_base_url}/recipients/{recipient_id}/email")
             if response.status_code == 200:
-                recipients: List[Dict] = response.json()
-                for r in recipients:
-                    if r["id"] == recipient_id:
-                        recipient_email = r["email"]
-                        recipient_name = r["name"]
-                        break
+                recipient_data = response.json()
+                recipient_email = recipient_data["email"]
+                recipient_name = recipient_data["name"]
+            else:
+                logger.error("Failed to fetch recipient: HTTP %d", response.status_code)
     except Exception as e:
         logger.error("Failed to fetch recipient details: %s", e)
 
