@@ -61,6 +61,22 @@ class TransactionORM(Base):
     delivery_status = Column(String, nullable=False, default="PENDING", index=True)
 
 
+class RecipientORM(Base):
+    """
+    Database representation of an email recipient.
+
+    Admin can add recipients (name + email), and users select by name.
+    """
+
+    __tablename__ = "recipients"
+
+    pk = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False, index=True)
+    created_at_utc = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 def init_db() -> None:
     """
     Initialize database and create tables if they don't exist.

@@ -29,3 +29,8 @@ The recipient will receive emails in the following structure:
 ## 🔐 Admin Access
 The public-facing dashboard is protected.
 * **Default Password**: `AdminPassword123!` (Ensure to change this in environment variables).
+
+vercel: richierodney434
+render: richierodney434
+supabase:
+github: richierodney5

@@ -1,4 +1,4 @@
-const API_BASE = "";
+const API_BASE = "https://krab-sender.onrender.com";
 
 function formatNy(ts) {
   if (!ts) return "";
@@ -361,6 +361,7 @@ function setupEvents() {
       await refreshLatest();
       await refreshSummary();
       applyLoggedInUI(true);
+      // Recipients will be refreshed by the modified applyLoggedInUI
     } catch (e) {
       console.error(e);
       storePassword("");
@@ -394,6 +395,148 @@ function setupEvents() {
       downloadSummaryCsv();
     });
   }
+
+  // Recipient management
+  const addRecipientBtn = document.getElementById("add-recipient-btn");
+  const recipientForm = document.getElementById("recipient-form");
+  const recipientNameInput = document.getElementById("recipient-name-input");
+  const recipientEmailInput = document.getElementById("recipient-email-input");
+  const saveRecipientBtn = document.getElementById("save-recipient-btn");
+  const cancelRecipientBtn = document.getElementById("cancel-recipient-btn");
+  const recipientError = document.getElementById("recipient-error");
+  const recipientsBody = document.getElementById("recipients-body");
+
+  async function refreshRecipients() {
+    try {
+      const recipients = await fetchWithAdmin("/recipients/all");
+      renderRecipients(recipients);
+    } catch (e) {
+      console.error("Failed to fetch recipients:", e);
+      recipientsBody.innerHTML = `
+        <tr>
+          <td colspan="3" class="muted">Failed to load recipients.</td>
+        </tr>
+      `;
+    }
+  }
+
+  function renderRecipients(recipients) {
+    recipientsBody.innerHTML = "";
+    if (!recipients || recipients.length === 0) {
+      recipientsBody.innerHTML = `
+        <tr>
+          <td colspan="3" class="muted">No recipients yet. Click "Add" to create one.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    for (const r of recipients) {
+      const tr = document.createElement("tr");
+
+      const tdName = document.createElement("td");
+      tdName.textContent = r.name;
+      tr.appendChild(tdName);
+
+      const tdEmail = document.createElement("td");
+      tdEmail.textContent = r.email;
+      tr.appendChild(tdEmail);
+
+      const tdActions = document.createElement("td");
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "secondary";
+      deleteBtn.style.fontSize = "0.75rem";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => deleteRecipient(r.id));
+      tdActions.appendChild(deleteBtn);
+      tr.appendChild(tdActions);
+
+      recipientsBody.appendChild(tr);
+    }
+  }
+
+  async function deleteRecipient(id) {
+    if (!confirm("Are you sure you want to delete this recipient?")) {
+      return;
+    }
+    try {
+      await fetchWithAdmin(`/recipients/${id}`, { method: "DELETE" });
+      await refreshRecipients();
+    } catch (e) {
+      console.error("Failed to delete recipient:", e);
+      alert("Failed to delete recipient. Please try again.");
+    }
+  }
+
+  async function saveRecipient() {
+    const name = recipientNameInput.value.trim();
+    const email = recipientEmailInput.value.trim();
+
+    if (!name || !email) {
+      recipientError.textContent = "Name and email are required.";
+      recipientError.style.display = "block";
+      return;
+    }
+
+    if (!email.includes("@")) {
+      recipientError.textContent = "Please enter a valid email address.";
+      recipientError.style.display = "block";
+      return;
+    }
+
+    recipientError.style.display = "none";
+
+    try {
+      await fetchWithAdmin("/recipients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email }),
+      });
+      recipientNameInput.value = "";
+      recipientEmailInput.value = "";
+      recipientForm.style.display = "none";
+      await refreshRecipients();
+    } catch (e) {
+      console.error("Failed to save recipient:", e);
+      recipientError.textContent = "Failed to save recipient. Please try again.";
+      recipientError.style.display = "block";
+    }
+  }
+
+  addRecipientBtn.addEventListener("click", () => {
+    recipientForm.style.display = "block";
+    recipientNameInput.focus();
+  });
+
+  cancelRecipientBtn.addEventListener("click", () => {
+    recipientForm.style.display = "none";
+    recipientNameInput.value = "";
+    recipientEmailInput.value = "";
+    recipientError.style.display = "none";
+  });
+
+  saveRecipientBtn.addEventListener("click", saveRecipient);
+
+  recipientNameInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      recipientEmailInput.focus();
+    }
+  });
+
+  recipientEmailInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      saveRecipient();
+    }
+  });
+
+  // Refresh recipients when logged in
+  const originalApplyLoggedInUI = applyLoggedInUI;
+  applyLoggedInUI = (loggedIn) => {
+    originalApplyLoggedInUI(loggedIn);
+    if (loggedIn) {
+      refreshRecipients();
+    }
+  };
 }
 
 window.addEventListener("DOMContentLoaded", () => {

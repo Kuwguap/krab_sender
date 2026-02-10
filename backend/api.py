@@ -3,9 +3,19 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from zoneinfo import ZoneInfo
 
+from pydantic import BaseModel
+
 from .config import ApiConfig
 from .db import init_db
-from .repository import get_latest_transaction, list_transactions, get_rolling_summary_ny
+from .repository import (
+    get_latest_transaction,
+    list_transactions,
+    get_rolling_summary_ny,
+    list_recipients,
+    get_recipient_by_id,
+    create_recipient,
+    delete_recipient,
+)
 
 
 NY_TZ = ZoneInfo("America/New_York")
@@ -61,6 +71,47 @@ def health():
     Basic health-check endpoint for the Admin Dashboard.
     """
     return {"status": "ok", "service": "krab-sender-api"}
+
+
+# Public endpoint: anyone can view recent transactions
+@app.get("/transactions/public")
+def transactions_public(limit: int = 10):
+    """
+    Public endpoint to view recent transactions (no auth required).
+    Used by the Telegram bot's /transactions command.
+    """
+    items = list_transactions(limit=limit, offset=0)
+    result = []
+    for tx in items:
+        ts_ny = tx.timestamp.astimezone(NY_TZ)
+        result.append(
+            {
+                "id": tx.id,
+                "telegram_name": tx.telegram_name,
+                "telegram_handle": tx.telegram_handle,
+                "filename": tx.filename,
+                "timestamp_ny": ts_ny.isoformat(),
+                "delivery_status": tx.delivery_status,
+            }
+        )
+    return result
+
+
+# Public endpoint: bot needs to fetch recipients
+@app.get("/recipients")
+def recipients_public():
+    """
+    Public endpoint to fetch all recipients (for bot inline keyboard).
+    Returns only name and id (no email exposed).
+    """
+    recipients = list_recipients()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+        }
+        for r in recipients
+    ]
 
 
 @app.get("/transactions/latest", dependencies=[Depends(require_admin)])
@@ -127,6 +178,54 @@ def options_transactions():
 
 @app.options("/transactions/latest")
 def options_transactions_latest():
+    return {}
+
+
+# Recipient management endpoints (admin only)
+class RecipientCreate(BaseModel):
+    name: str
+    email: str
+
+
+@app.get("/recipients/all", dependencies=[Depends(require_admin)])
+def recipients_all():
+    """
+    Admin endpoint: list all recipients with full details.
+    """
+    return list_recipients()
+
+
+@app.post("/recipients", dependencies=[Depends(require_admin)])
+def recipients_create(recipient: RecipientCreate):
+    """
+    Admin endpoint: create a new recipient.
+    """
+    return create_recipient(name=recipient.name, email=recipient.email)
+
+
+@app.delete("/recipients/{recipient_id}", dependencies=[Depends(require_admin)])
+def recipients_delete(recipient_id: str):
+    """
+    Admin endpoint: delete a recipient by ID.
+    """
+    deleted = delete_recipient(recipient_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    return {"success": True}
+
+
+@app.options("/recipients")
+def options_recipients():
+    return {}
+
+
+@app.options("/recipients/all")
+def options_recipients_all():
+    return {}
+
+
+@app.options("/transactions/public")
+def options_transactions_public():
     return {}
 
 

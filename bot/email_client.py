@@ -20,6 +20,7 @@ class EmailProvider(Protocol):
         tx: Transaction,
         attachment_bytes: Optional[bytes],
         attachment_filename: Optional[str],
+        recipient_email: Optional[str] = None,
     ) -> None:
         ...
 
@@ -43,6 +44,7 @@ class StubEmailProvider:
         tx: Transaction,
         attachment_bytes: Optional[bytes],
         attachment_filename: Optional[str],
+        recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
         body = (
@@ -53,10 +55,12 @@ class StubEmailProvider:
             f"Timestamp (UTC): {tx.timestamp.isoformat()}"
         )
 
+        to_addr = recipient_email or self.to_address
+
         # For now we just log to stdout. Replace this with real email API calls later.
         print("=== Krab Sender Email Stub ===")
         print(f"From: {self.from_address}")
-        print(f"To:   {self.to_address}")
+        print(f"To:   {to_addr}")
         print(f"Subj: {subject}")
         print("--- Body ---")
         print(body)
@@ -87,6 +91,7 @@ class SmtpEmailProvider:
         tx: Transaction,
         attachment_bytes: Optional[bytes],
         attachment_filename: Optional[str],
+        recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
         body = (
@@ -97,10 +102,12 @@ class SmtpEmailProvider:
             f"Timestamp (UTC): {tx.timestamp.isoformat()}"
         )
 
+        to_addr = recipient_email or self.to_address
+
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = self.from_address
-        msg["To"] = self.to_address
+        msg["To"] = to_addr
         msg.set_content(body)
 
         if attachment_bytes is not None and attachment_filename:

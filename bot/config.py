@@ -18,6 +18,7 @@ class BotConfig:
     email_smtp_port: int
     email_smtp_username: str
     email_smtp_password: str
+    api_base_url: str
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -44,6 +45,7 @@ class BotConfig:
             email_smtp_port=int(os.getenv("EMAIL_SMTP_PORT", "587")),
             email_smtp_username=os.getenv("EMAIL_SMTP_USERNAME", ""),
             email_smtp_password=os.getenv("EMAIL_SMTP_PASSWORD", ""),
+            api_base_url=os.getenv("API_BASE_URL", "http://127.0.0.1:8000"),
         )
 
 

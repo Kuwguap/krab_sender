@@ -6,7 +6,7 @@ from typing import Iterable, List, Optional
 
 from zoneinfo import ZoneInfo
 
-from .db import SessionLocal, TransactionORM
+from .db import SessionLocal, TransactionORM, RecipientORM
 from bot.models import Transaction
 
 
@@ -167,5 +167,73 @@ def get_rolling_summary_ny(
     }
 
     return summary
+
+
+# Recipient management functions
+def list_recipients() -> List[dict]:
+    """
+    Fetch all recipients ordered by name.
+    """
+    with get_session() as session:
+        rows = session.query(RecipientORM).order_by(RecipientORM.name.asc()).all()
+        return [
+            {
+                "id": row.id,
+                "name": row.name,
+                "email": row.email,
+                "created_at_utc": row.created_at_utc.isoformat(),
+            }
+            for row in rows
+        ]
+
+
+def get_recipient_by_id(recipient_id: str) -> Optional[dict]:
+    """
+    Fetch a recipient by ID.
+    """
+    with get_session() as session:
+        row = session.query(RecipientORM).filter(RecipientORM.id == recipient_id).first()
+        if not row:
+            return None
+        return {
+            "id": row.id,
+            "name": row.name,
+            "email": row.email,
+            "created_at_utc": row.created_at_utc.isoformat(),
+        }
+
+
+def create_recipient(name: str, email: str) -> dict:
+    """
+    Create a new recipient.
+    """
+    import uuid
+    recipient_id = str(uuid.uuid4())
+    with get_session() as session:
+        orm = RecipientORM(
+            id=recipient_id,
+            name=name,
+            email=email,
+            created_at_utc=datetime.now(timezone.utc),
+        )
+        session.add(orm)
+        return {
+            "id": orm.id,
+            "name": orm.name,
+            "email": orm.email,
+            "created_at_utc": orm.created_at_utc.isoformat(),
+        }
+
+
+def delete_recipient(recipient_id: str) -> bool:
+    """
+    Delete a recipient by ID. Returns True if deleted, False if not found.
+    """
+    with get_session() as session:
+        row = session.query(RecipientORM).filter(RecipientORM.id == recipient_id).first()
+        if not row:
+            return False
+        session.delete(row)
+        return True
 
 
