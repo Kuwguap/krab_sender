@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 from enum import IntEnum, auto
 from typing import List, Dict
 
@@ -280,99 +281,183 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
-async def show_transactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    /transactions command: show recent transactions to anyone.
-    """
-    application = context.application
-    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
+def _transactions_access_valid(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Check if the user has a valid transactions access code."""
+    expires_at: datetime | None = context.user_data.get("tx_access_expires_at")
+    if not expires_at:
+        return False
+    return datetime.now(timezone.utc) < expires_at
 
+
+async def _prompt_for_tx_code(message):
+    await message.reply_text(
+        "🔐 This transactions view is restricted.\n\n"
+        "Please enter the access code. It will be valid for 5 minutes.\n\n"
+        "Code: DispatchBackend"
+    )
+
+
+async def _fetch_transactions_page(
+    bot_config: BotConfig, page: int
+) -> List[Dict]:
+    """Fetch a single page of transactions from the API."""
+    limit = 11  # request one extra to know if there is a next page
+    offset = page * 10
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{bot_config.api_base_url}/transactions/public?limit=10")
+            response = await client.get(
+                f"{bot_config.api_base_url}/transactions/public",
+                params={"limit": limit, "offset": offset},
+            )
             if response.status_code == 200:
-                transactions: List[Dict] = response.json()
-            else:
-                transactions = []
+                return response.json()
     except Exception as e:
         logger.error("Failed to fetch transactions: %s", e)
-        transactions = []
+    return []
 
-    if not transactions:
-        await update.message.reply_text("📋 No transactions yet. Send a document to get started!")
-        return
 
-    from datetime import datetime
+def _format_transactions_message(transactions: List[Dict]) -> str:
     from zoneinfo import ZoneInfo
 
     ny_tz = ZoneInfo("America/New_York")
-    message_lines = ["📋 **Recent Transactions:**\n"]
+    lines: List[str] = ["📋 **Recent Transactions:**\n"]
 
     for tx in transactions[:10]:
         try:
             ts = datetime.fromisoformat(tx["timestamp_ny"].replace("Z", "+00:00"))
             ts_ny = ts.astimezone(ny_tz)
             time_str = ts_ny.strftime("%b %d, %Y %I:%M %p ET")
-        except:
+        except Exception:
             time_str = tx.get("timestamp_ny", "Unknown time")
 
         status_emoji = "✅" if tx.get("delivery_status") == "DELIVERED" else "⏳"
-        message_lines.append(
+        # Only show telegram_name, no username/handle
+        lines.append(
             f"{status_emoji} **{tx['filename']}**\n"
-            f"   👤 {tx['telegram_name']} (@{tx.get('telegram_handle', 'unknown')})\n"
+            f"   👤 {tx['telegram_name']}\n"
             f"   🕐 {time_str}\n"
         )
 
-    await update.message.reply_text("\n".join(message_lines), parse_mode="Markdown")
+    return "\n".join(lines)
 
 
-async def handle_transactions_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def _build_tx_pagination_keyboard(has_prev: bool, has_next: bool, page: int):
+    buttons: List[List[InlineKeyboardButton]] = []
+    row: List[InlineKeyboardButton] = []
+    if has_prev:
+        row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"tx_page_{page-1}"))
+    if has_next:
+        row.append(InlineKeyboardButton("Next ➡️", callback_data=f"tx_page_{page+1}"))
+    if row:
+        buttons.append(row)
+    return InlineKeyboardMarkup(buttons) if buttons else None
+
+
+async def _send_transactions_page_from_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, page: int
+) -> None:
+    """Send a transactions page in response to a normal message (/transactions)."""
+    application = context.application
+    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
+
+    transactions = await _fetch_transactions_page(bot_config, page)
+    if not transactions:
+        await update.message.reply_text(
+            "📋 No transactions yet. Send a document to get started!"
+        )
+        return
+
+    has_next = len(transactions) > 10
+    text = _format_transactions_message(transactions)
+    keyboard = _build_tx_pagination_keyboard(page > 0, has_next, page)
+
+    await update.message.reply_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+
+
+async def _send_transactions_page_from_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, page: int
+) -> None:
+    """Edit the existing message to show a new transactions page."""
+    query = update.callback_query
+    application = context.application
+    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
+
+    transactions = await _fetch_transactions_page(bot_config, page)
+    if not transactions:
+        await query.edit_message_text(
+            "📋 No transactions yet. Send a document to get started!"
+        )
+        return
+
+    has_next = len(transactions) > 10
+    text = _format_transactions_message(transactions)
+    keyboard = _build_tx_pagination_keyboard(page > 0, has_next, page)
+
+    await query.edit_message_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+
+
+async def show_transactions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handle inline button callback for viewing transactions.
+    /transactions command: gated by a short‑lived access code, with pagination.
+    """
+    # Check access
+    if not _transactions_access_valid(context):
+        # Ask for code and mark that we're waiting
+        context.user_data["awaiting_tx_code"] = True
+        await _prompt_for_tx_code(update.message)
+        return
+
+    # Already authenticated for transactions
+    await _send_transactions_page_from_message(update, context, page=0)
+
+
+async def handle_transactions_button(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    Handle inline button callback for viewing transactions (from /start).
     """
     query = update.callback_query
     await query.answer()
 
-    application = context.application
-    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{bot_config.api_base_url}/transactions/public?limit=10")
-            if response.status_code == 200:
-                transactions: List[Dict] = response.json()
-            else:
-                transactions = []
-    except Exception as e:
-        logger.error("Failed to fetch transactions: %s", e)
-        transactions = []
-
-    if not transactions:
-        await query.edit_message_text("📋 No transactions yet. Send a document to get started!")
+    if not _transactions_access_valid(context):
+        # Ask for code and mark that we're waiting
+        context.user_data["awaiting_tx_code"] = True
+        await _prompt_for_tx_code(query.message)
         return
 
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
+    await _send_transactions_page_from_callback(update, context, page=0)
 
-    ny_tz = ZoneInfo("America/New_York")
-    message_lines = ["📋 **Recent Transactions:**\n"]
 
-    for tx in transactions[:10]:
-        try:
-            ts = datetime.fromisoformat(tx["timestamp_ny"].replace("Z", "+00:00"))
-            ts_ny = ts.astimezone(ny_tz)
-            time_str = ts_ny.strftime("%b %d, %Y %I:%M %p ET")
-        except:
-            time_str = tx.get("timestamp_ny", "Unknown time")
+async def handle_tx_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle user entering the transactions access code.
+    """
+    if not context.user_data.get("awaiting_tx_code"):
+        # Not expecting a code; ignore.
+        return
 
-        status_emoji = "✅" if tx.get("delivery_status") == "DELIVERED" else "⏳"
-        message_lines.append(
-            f"{status_emoji} **{tx['filename']}**\n"
-            f"   👤 {tx['telegram_name']} (@{tx.get('telegram_handle', 'unknown')})\n"
-            f"   🕐 {time_str}\n"
+    text = (update.message.text or "").strip()
+    if text == "DispatchBackend":
+        # Grant access for 5 minutes
+        context.user_data["tx_access_expires_at"] = datetime.now(timezone.utc) + timedelta(
+            minutes=5
         )
-
-    await query.edit_message_text("\n".join(message_lines), parse_mode="Markdown")
+        context.user_data["awaiting_tx_code"] = False
+        await update.message.reply_text(
+            "✅ Access granted for 5 minutes.\n\nShowing recent transactions..."
+        )
+        await _send_transactions_page_from_message(update, context, page=0)
+    else:
+        await update.message.reply_text("❌ Invalid code. Please try again.")
 
 
 def build_application(config: BotConfig):
@@ -406,6 +491,13 @@ def build_application(config: BotConfig):
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("transactions", show_transactions))
+    # Handler for access code input (must come before generic handlers)
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_tx_code,
+        )
+    )
     app.add_handler(CallbackQueryHandler(handle_transactions_button, pattern="^view_transactions$"))
     app.add_handler(conv_handler)
 

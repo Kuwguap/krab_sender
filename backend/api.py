@@ -75,12 +75,14 @@ def health():
 
 # Public endpoint: anyone can view recent transactions
 @app.get("/transactions/public")
-def transactions_public(limit: int = 10):
+def transactions_public(limit: int = 10, offset: int = 0):
     """
     Public endpoint to view recent transactions (no auth required).
     Used by the Telegram bot's /transactions command.
+
+    Supports simple pagination via limit & offset.
     """
-    items = list_transactions(limit=limit, offset=0)
+    items = list_transactions(limit=limit, offset=offset)
     result = []
     for tx in items:
         ts_ny = tx.timestamp.astimezone(NY_TZ)
