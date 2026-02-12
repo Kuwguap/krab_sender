@@ -555,26 +555,39 @@ def build_application(config: BotConfig):
     return app
 
 
+async def async_main() -> None:
+    """
+    Async entry point for the bot.
+    """
+    # Ensure DB is ready before starting the bot.
+    init_db()
+
+    config = BotConfig.from_env()
+    app = build_application(config)
+
+    logger.info("Starting Krab Sender bot...")
+    async with app:
+        await app.start()
+        await app.updater.start_polling(drop_pending_updates=True)
+        # Keep running until stopped - wait indefinitely
+        await asyncio.Event().wait()
+
+
 def main() -> None:
     """
     Entry point for local development:
 
         python -m bot.main
 
-    Uses python-telegram-bot's built-in run_polling(), which handles
-    initialization, polling, and graceful shutdown internally.
+    Uses asyncio.run() for Python 3.14+ compatibility.
     """
     try:
-        # Ensure DB is ready before starting the bot.
-        init_db()
-
-        config = BotConfig.from_env()
-        app = build_application(config)
-
-        logger.info("Starting Krab Sender bot...")
-        app.run_polling()
+        asyncio.run(async_main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Krab Sender bot stopped.")
+    except Exception as e:
+        logger.error(f"Failed to start bot: {e}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":
