@@ -145,12 +145,18 @@ async def handle_client_details(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data.pop("client_details", None)
         return ConversationHandler.END
 
-    # Build inline keyboard with recipient names
+    # Build inline keyboard with recipient names (2 buttons per row for better spacing)
     keyboard_buttons = []
-    for recipient in recipients:
-        keyboard_buttons.append([
-            InlineKeyboardButton(recipient["name"], callback_data=f"recipient_{recipient['id']}")
-        ])
+    for i in range(0, len(recipients), 2):
+        row = [
+            InlineKeyboardButton(recipients[i]["name"], callback_data=f"recipient_{recipients[i]['id']}")
+        ]
+        # Add second button if there's another recipient
+        if i + 1 < len(recipients):
+            row.append(
+                InlineKeyboardButton(recipients[i + 1]["name"], callback_data=f"recipient_{recipients[i + 1]['id']}")
+            )
+        keyboard_buttons.append(row)
 
     keyboard = InlineKeyboardMarkup(keyboard_buttons)
 
