@@ -15,11 +15,7 @@ class SmtpEmailProvider:
     ) -> None:
         subject = "CLIENT"
         body = (
-            f"{tx.client_details}\n\n"
-            f"Sent by: {tx.telegram_name} (@{tx.telegram_handle or 'unknown'})\n"
-            f"Source: Krab Sender by @johnnybravomadeit\n"
-            f"Attachment: {tx.filename}\n"
-            f"Timestamp (UTC): {tx.timestamp.isoformat()}"
+           f"Timestamp (UTC): {tx.timestamp.isoformat()}"
         )
 
         msg = EmailMessage()

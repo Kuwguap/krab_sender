@@ -47,8 +47,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ])
     await update.message.reply_text(
         "🦀 Welcome to Krab Sender!\n\n"
-        "Send me a PDF document and I'll guide you through providing the client details.\n\n"
-        "You can also view recent transactions using the button below.",
+        "Please upload PDF Document.\n\n"
+        "👑🤖🦀.\n\n",
         reply_markup=keyboard,
     )
     logger.info("User %s (%s) started the bot", user.full_name, user.username)
@@ -83,11 +83,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await message.reply_text(
         "📄 Got your document.\n\n"
-        "Please reply with the Client Details for this file.\n"
-        "Use Format:\n"
-        "  - Phone\n"
-        "  - Name\n"
-        "  - Delivery Address"
+        "Now Upload Client Contact using Privnote.com\n"
     )
 
     return State.WAITING_FOR_CLIENT_DETAILS
@@ -120,15 +116,25 @@ async def handle_client_details(update: Update, context: ContextTypes.DEFAULT_TY
     application = context.application
     bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
 
+    logger.info("Fetching recipients from API: %s/recipients", bot_config.api_base_url)
+    
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{bot_config.api_base_url}/recipients")
             if response.status_code == 200:
                 recipients: List[Dict] = response.json()
+                logger.info("Successfully fetched %d recipients", len(recipients))
             else:
+                logger.warning("Failed to fetch recipients: HTTP %d", response.status_code)
                 recipients = []
+    except httpx.TimeoutException:
+        logger.error("Timeout while fetching recipients from API")
+        await message.reply_text(
+            "⏱️ The request timed out while fetching recipients. Please try again."
+        )
+        return State.WAITING_FOR_CLIENT_DETAILS
     except Exception as e:
-        logger.error("Failed to fetch recipients: %s", e)
+        logger.error("Failed to fetch recipients: %s", e, exc_info=True)
         recipients = []
 
     if not recipients:
@@ -148,11 +154,20 @@ async def handle_client_details(update: Update, context: ContextTypes.DEFAULT_TY
 
     keyboard = InlineKeyboardMarkup(keyboard_buttons)
 
-    await message.reply_text(
-        "✅ Client details received!\n\n"
-        "Please select a recipient for this document:",
-        reply_markup=keyboard,
-    )
+    logger.info("Sending recipient selection keyboard to user %s", user.full_name)
+    try:
+        await message.reply_text(
+            "✅ Client details received!\n\n"
+            "Please select a recipient for this document:",
+            reply_markup=keyboard,
+        )
+        logger.info("Successfully sent recipient selection to user %s", user.full_name)
+    except Exception as e:
+        logger.error("Failed to send recipient selection message: %s", e, exc_info=True)
+        await message.reply_text(
+            "❌ An error occurred while preparing the recipient list. Please try again."
+        )
+        return ConversationHandler.END
 
     return State.WAITING_FOR_RECIPIENT
 
@@ -237,6 +252,7 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
         recipient_name,
     )
 
+    email_sent = False
     try:
         await email_provider.send_transaction_email(
             tx=tx,
@@ -244,10 +260,22 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
             attachment_filename=pending_doc["file_name"],
             recipient_email=recipient_email,
         )
+        email_sent = True
 
         # Mark as delivered and persist to DB.
         tx.delivery_status = "DELIVERED"
-        save_transaction(tx)
+        try:
+            save_transaction(tx)
+        except Exception as db_error:
+            logger.error("Email sent successfully but failed to save to database: %s", db_error, exc_info=True)
+            # Email was sent, so we still show success but warn about DB issue
+            await query.edit_message_text(
+                f"✅ Document sent to **{recipient_name}**!\n\n"
+                "⚠️ Note: There was an issue saving the record to the database, "
+                "but your email was delivered successfully.\n"
+                "Keep up the good work👑🤖🦀!"
+            )
+            return ConversationHandler.END
 
         await query.edit_message_text(
             f"✅ Document sent to **{recipient_name}**!\n\n"
@@ -255,12 +283,24 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
             "Keep up the good work👑🤖🦀!"
         )
     except Exception as e:
-        logger.error("Failed to send email: %s", e)
-        tx.delivery_status = "FAILED"
-        save_transaction(tx)
-        await query.edit_message_text(
-            "❌ Failed to send email. Please try again or contact support."
-        )
+        logger.error("Failed to send email: %s", e, exc_info=True)
+        if email_sent:
+            # Email was sent but something else failed
+            await query.edit_message_text(
+                f"✅ Document sent to **{recipient_name}**!\n\n"
+                "⚠️ There was an issue recording the transaction, "
+                "but your email was delivered successfully."
+            )
+        else:
+            # Email sending failed
+            tx.delivery_status = "FAILED"
+            try:
+                save_transaction(tx)
+            except Exception as db_error:
+                logger.error("Also failed to save failed transaction to DB: %s", db_error)
+            await query.edit_message_text(
+                "❌ Failed to send email. Please try again or contact support."
+            )
 
     # Clear the context for next transaction
     context.user_data.pop("pending_document", None)
@@ -293,7 +333,6 @@ async def _prompt_for_tx_code(message):
     await message.reply_text(
         "🔐 This transactions view is restricted.\n\n"
         "Please enter the access code. It will be valid for 5 minutes.\n\n"
-        "Code: DispatchBackend"
     )
 
 
@@ -441,6 +480,11 @@ async def handle_tx_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """
     Handle user entering the transactions access code.
     """
+    # Skip if user is in a conversation (sending file/client details)
+    if context.user_data.get("pending_document") or context.user_data.get("client_details"):
+        # User is in a conversation flow, let the conversation handler process this
+        return
+    
     if not context.user_data.get("awaiting_tx_code"):
         # Not expecting a code; ignore.
         return
@@ -491,15 +535,16 @@ def build_application(config: BotConfig):
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("transactions", show_transactions))
-    # Handler for access code input (must come before generic handlers)
+    app.add_handler(CallbackQueryHandler(handle_transactions_button, pattern="^view_transactions$"))
+    # Conversation handler should come before generic text handlers
+    app.add_handler(conv_handler)
+    # Handler for access code input (comes after conversation handler to avoid conflicts)
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
             handle_tx_code,
         )
     )
-    app.add_handler(CallbackQueryHandler(handle_transactions_button, pattern="^view_transactions$"))
-    app.add_handler(conv_handler)
 
     return app
 

@@ -41,6 +41,7 @@ def save_transaction(tx: Transaction) -> None:
     )
     with get_session() as session:
         session.add(orm)
+        session.flush()  # Ensure the ORM is added before commit
 
 
 def list_transactions(limit: int = 100, offset: int = 0) -> List[Transaction]:
