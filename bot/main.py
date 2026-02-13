@@ -48,7 +48,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ])
     await update.message.reply_text(
         "🦀 Welcome to Krab Sender!\n\n"
-        "Please upload PDF Document.\n\n"
+        "🏷Please upload PDF Document.\n\n"
         "👑🤖🦀.\n\n",
         reply_markup=keyboard,
     )
@@ -83,8 +83,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
     await message.reply_text(
-        "📄 Got your document.\n\n"
-        "Now Upload Client Contact using Privnote.com\n"
+        "🏷PDF Complete✅Thank you❗️.\n\n"
+        "👤Now TYPE client info: \n"
     )
 
     return State.WAITING_FOR_CLIENT_DETAILS
@@ -164,8 +164,8 @@ async def handle_client_details(update: Update, context: ContextTypes.DEFAULT_TY
     logger.info("Sending recipient selection keyboard to user %s", user.full_name)
     try:
         await message.reply_text(
-            "✅ Client details received!\n\n"
-            "Please select a recipient for this document:",
+            "👤Client info Received✅ Thank you❗️\n\n"
+            "🚘 Please Select a Driver:",
             reply_markup=keyboard,
         )
         logger.info("Successfully sent recipient selection to user %s", user.full_name)
@@ -368,9 +368,9 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             return ConversationHandler.END
 
         await query.edit_message_text(
-            f"✅ Document sent to **{recipient_name}**!\n\n"
-            "Your document and client details have been recorded.\n"
-            "Keep up the good work👑🤖🦀!",
+            f"✅Completed🏷Successfully❗️\n\n"
+            "📈Thank you, keep up the great work⭐️ ! \n"
+            "👑🤖🦀!",
             parse_mode="Markdown"
         )
     except Exception as e:
