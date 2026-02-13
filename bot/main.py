@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 class State(IntEnum):
     WAITING_FOR_CLIENT_DETAILS = auto()
     WAITING_FOR_RECIPIENT = auto()
+    WAITING_FOR_CONFIRMATION = auto()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -180,7 +181,7 @@ async def handle_client_details(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    State 3: User selected a recipient, send the email.
+    State 3: User selected a recipient, show confirmation.
     """
     query = update.callback_query
     await query.answer()
@@ -225,6 +226,79 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
         context.user_data.pop("client_details", None)
         return ConversationHandler.END
 
+    # Store recipient info for confirmation
+    context.user_data["selected_recipient_id"] = recipient_id
+    context.user_data["selected_recipient_email"] = recipient_email
+    context.user_data["selected_recipient_name"] = recipient_name
+
+    # Show confirmation message
+    filename = pending_doc["file_name"]
+    confirmation_keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Yes, Send", callback_data="confirm_yes"),
+            InlineKeyboardButton("❌ No, Cancel", callback_data="confirm_no")
+        ]
+    ])
+
+    await query.edit_message_text(
+        f"⚠️ **Confirmation Required**\n\n"
+        f"Are you sure you want to send:\n"
+        f"📄 **{filename}**\n\n"
+        f"To: **{recipient_name}**\n\n"
+        f"Please confirm:",
+        reply_markup=confirmation_keyboard,
+        parse_mode="Markdown"
+    )
+
+    return State.WAITING_FOR_CONFIRMATION
+
+
+async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    State 4: Handle confirmation (Yes or No).
+    """
+    query = update.callback_query
+    await query.answer()
+
+    if not query.data:
+        await query.edit_message_text("❌ Invalid selection. Please try again.")
+        return ConversationHandler.END
+
+    if query.data == "confirm_no":
+        # User cancelled
+        await query.edit_message_text(
+            "❌ **Cancelled**\n\n"
+            "The email was not sent. You can start over by sending a new document.",
+            parse_mode="Markdown"
+        )
+        # Clear the context
+        context.user_data.pop("pending_document", None)
+        context.user_data.pop("client_details", None)
+        context.user_data.pop("selected_recipient_id", None)
+        context.user_data.pop("selected_recipient_email", None)
+        context.user_data.pop("selected_recipient_name", None)
+        return ConversationHandler.END
+
+    if query.data != "confirm_yes":
+        await query.edit_message_text("❌ Invalid selection. Please try again.")
+        return ConversationHandler.END
+
+    # User confirmed - proceed with sending
+    pending_doc = context.user_data.get("pending_document")
+    client_details_text = context.user_data.get("client_details")
+    recipient_email = context.user_data.get("selected_recipient_email")
+    recipient_name = context.user_data.get("selected_recipient_name")
+
+    if not pending_doc or not client_details_text or not recipient_email:
+        await query.edit_message_text("❌ Session expired. Please start over.")
+        # Clear context
+        context.user_data.pop("pending_document", None)
+        context.user_data.pop("client_details", None)
+        context.user_data.pop("selected_recipient_id", None)
+        context.user_data.pop("selected_recipient_email", None)
+        context.user_data.pop("selected_recipient_name", None)
+        return ConversationHandler.END
+
     user = update.effective_user
     tx = Transaction.new(
         id=str(uuid.uuid4()),
@@ -238,6 +312,9 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
     bot = context.bot
     telegram_file = await bot.get_file(pending_doc["file_id"])
     file_bytes = await telegram_file.download_as_bytearray()
+
+    application = context.application
+    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
 
     email_provider = create_email_provider(
         provider_name=bot_config.email_provider,
@@ -279,14 +356,22 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
                 f"✅ Document sent to **{recipient_name}**!\n\n"
                 "⚠️ Note: There was an issue saving the record to the database, "
                 "but your email was delivered successfully.\n"
-                "Keep up the good work👑🤖🦀!"
+                "Keep up the good work👑🤖🦀!",
+                parse_mode="Markdown"
             )
+            # Clear context
+            context.user_data.pop("pending_document", None)
+            context.user_data.pop("client_details", None)
+            context.user_data.pop("selected_recipient_id", None)
+            context.user_data.pop("selected_recipient_email", None)
+            context.user_data.pop("selected_recipient_name", None)
             return ConversationHandler.END
 
         await query.edit_message_text(
             f"✅ Document sent to **{recipient_name}**!\n\n"
             "Your document and client details have been recorded.\n"
-            "Keep up the good work👑🤖🦀!"
+            "Keep up the good work👑🤖🦀!",
+            parse_mode="Markdown"
         )
     except Exception as e:
         logger.error("Failed to send email: %s", e, exc_info=True)
@@ -295,7 +380,8 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
             await query.edit_message_text(
                 f"✅ Document sent to **{recipient_name}**!\n\n"
                 "⚠️ There was an issue recording the transaction, "
-                "but your email was delivered successfully."
+                "but your email was delivered successfully.",
+                parse_mode="Markdown"
             )
         else:
             # Email sending failed
@@ -305,12 +391,16 @@ async def handle_recipient_selection(update: Update, context: ContextTypes.DEFAU
             except Exception as db_error:
                 logger.error("Also failed to save failed transaction to DB: %s", db_error)
             await query.edit_message_text(
-                "❌ Failed to send email. Please try again or contact support."
+                "❌ Failed to send email. Please try again or contact support.",
+                parse_mode="Markdown"
             )
 
     # Clear the context for next transaction
     context.user_data.pop("pending_document", None)
     context.user_data.pop("client_details", None)
+    context.user_data.pop("selected_recipient_id", None)
+    context.user_data.pop("selected_recipient_email", None)
+    context.user_data.pop("selected_recipient_name", None)
 
     return ConversationHandler.END
 
@@ -533,6 +623,9 @@ def build_application(config: BotConfig):
             ],
             State.WAITING_FOR_RECIPIENT: [
                 CallbackQueryHandler(handle_recipient_selection, pattern="^recipient_"),
+            ],
+            State.WAITING_FOR_CONFIRMATION: [
+                CallbackQueryHandler(handle_confirmation, pattern="^confirm_(yes|no)$"),
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
