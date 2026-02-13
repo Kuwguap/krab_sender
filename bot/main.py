@@ -368,7 +368,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             return ConversationHandler.END
 
         await query.edit_message_text(
-            f"✅Completed🏷Successfully❗️\n\n"
+            f"🚘Email📧sent to {recipient_name}✅\n\n"
+            "✅Completed🏷Successfully❗️\n\n"
             "📈Thank you, keep up the great work⭐️ ! \n"
             "👑🤖🦀!",
             parse_mode="Markdown"
