@@ -186,8 +186,6 @@ def list_recipients() -> List[dict]:
             }
             for row in rows
         ]
-
-
 def get_recipient_by_id(recipient_id: str) -> Optional[dict]:
     """
     Fetch a recipient by ID.
@@ -202,8 +200,6 @@ def get_recipient_by_id(recipient_id: str) -> Optional[dict]:
             "email": row.email,
             "created_at_utc": row.created_at_utc.isoformat(),
         }
-
-
 def create_recipient(name: str, email: str) -> dict:
     """
     Create a new recipient.
@@ -224,8 +220,6 @@ def create_recipient(name: str, email: str) -> dict:
             "email": orm.email,
             "created_at_utc": orm.created_at_utc.isoformat(),
         }
-
-
 def delete_recipient(recipient_id: str) -> bool:
     """
     Delete a recipient by ID. Returns True if deleted, False if not found.
@@ -236,5 +230,3 @@ def delete_recipient(recipient_id: str) -> bool:
             return False
         session.delete(row)
         return True
-
-

@@ -30,21 +30,6 @@ The recipient will receive emails in the following structure:
 The public-facing dashboard is protected.
 * **Default Password**: `AdminPassword123!` (Ensure to change this in environment variables).
 
-## 🔧 Render Environment Variables
-Add these in Render Dashboard → Your Service → Environment:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TELEGRAM_BOT_TOKEN` | ✅ | Your Telegram bot token |
-| `DATABASE_URL` | ✅ | PostgreSQL connection string (e.g. Supabase) |
-| `EMAIL_PROVIDER` | | `gmail_smtp` or `stub` (default) |
-| `EMAIL_SMTP_USERNAME` | | Gmail address for SMTP |
-| `EMAIL_SMTP_PASSWORD` | | Google App Password |
-| `EMAIL_FROM_ADDRESS` | | Sender email |
-| `ADMIN_PASSWORD` | | Dashboard password |
-| `API_BASE_URL` | | Backend URL (e.g. `https://your-api.onrender.com`) |
-| `OPENAI_API_KEY` | | Optional. For AI validation of client details (detects missing vehicle color etc). Create at https://platform.openai.com/api-keys |
-
 vercel: richierodney434
 render: richierodney434
 supabase:krabsender07

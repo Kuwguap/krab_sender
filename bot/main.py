@@ -18,7 +18,6 @@ from telegram.ext import (
     filters,
 )
 
-from .client_validation import validate_client_details
 from .config import BotConfig
 from .email_client import create_email_provider
 from .models import Transaction
@@ -111,22 +110,12 @@ async def handle_client_details(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text("Please provide some client details as text.")
         return State.WAITING_FOR_CLIENT_DETAILS
 
-    application = context.application
-    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
-
-    # AI validation: detect missing fields (e.g. vehicle color)
-    if bot_config.openai_api_key:
-        validation_prompt = await validate_client_details(
-            client_details_text, bot_config.openai_api_key
-        )
-        if validation_prompt:
-            await message.reply_text(f"⚠️ {validation_prompt}")
-            return State.WAITING_FOR_CLIENT_DETAILS
-
     # Store client details for later
     context.user_data["client_details"] = client_details_text
 
     # Fetch recipients from API
+    application = context.application
+    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
 
     logger.info("Fetching recipients from API: %s/recipients", bot_config.api_base_url)
     
