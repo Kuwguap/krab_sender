@@ -8,12 +8,22 @@ In later phases this can be swapped for SendGrid, Mailgun, SES, etc.
 import logging
 import time
 from dataclasses import dataclass
+from datetime import timezone
 from typing import Protocol, Optional
+from zoneinfo import ZoneInfo
 
 from email.message import EmailMessage
 import smtplib
 
 from .models import Transaction
+
+ET = ZoneInfo("America/New_York")
+
+
+def _format_timestamp_et(dt) -> str:
+    """Format datetime in Eastern time for display."""
+    ts_et = dt.astimezone(ET)
+    return ts_et.strftime("%Y-%m-%d %H:%M:%S ET")
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +113,7 @@ class SmtpEmailProvider:
         subject = "CLIENT"
         body = (
             f"{tx.client_details}\n\n"
-            f"Timestamp (UTC): {tx.timestamp.isoformat()}"
+            f"Timestamp (ET): {_format_timestamp_et(tx.timestamp)}"
         )
 
         to_addr = recipient_email or self.to_address
