@@ -28,6 +28,8 @@ services:
         sync: false
       - key: API_BASE_URL
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
 
   # Backend API Service (Optional - if you want to deploy the API too)
   - type: web
@@ -41,5 +43,8 @@ services:
       - key: DATABASE_URL
         sync: false
     healthCheckPath: /health
+
+
+
 
 
