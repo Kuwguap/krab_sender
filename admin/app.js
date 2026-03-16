@@ -4,16 +4,30 @@ function formatNy(ts) {
   if (!ts) return "";
   try {
     const d = new Date(ts);
-    return (
-      d.toLocaleString("en-US", {
-        timeZone: "America/New_York",
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }) + " ET"
+    const nyDate = new Date(
+      d.toLocaleString("en-US", { timeZone: "America/New_York" })
     );
+    const day = nyDate.getDate();
+    const dayMod100 = day % 100;
+    const suffix =
+      dayMod100 >= 11 && dayMod100 <= 13
+        ? "th"
+        : { 1: "st", 2: "nd", 3: "rd" }[day % 10] || "th";
+    const month = nyDate.toLocaleString("en-US", {
+      month: "long",
+    }).toLowerCase();
+    const year = nyDate.getFullYear();
+
+    let hours = nyDate.getHours();
+    const minutes = nyDate.getMinutes().toString().padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+
+    const dateLine = `${day}${suffix} ${month} ${year}`;
+    const timeLine = `${hours}:${minutes} ${ampm} ET`;
+
+    return `${dateLine}\n${timeLine}`;
   } catch {
     return ts;
   }

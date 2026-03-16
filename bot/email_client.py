@@ -8,14 +8,35 @@ In later phases this can be swapped for SendGrid, Mailgun, SES, etc.
 import logging
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol, Optional
 
 from email.message import EmailMessage
 import smtplib
+from zoneinfo import ZoneInfo
 
 from .models import Transaction
 
 logger = logging.getLogger(__name__)
+
+NY_TZ = ZoneInfo("America/New_York")
+
+
+def _ordinal(n: int) -> str:
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _format_ny_timestamp_lines(ts: datetime) -> str:
+    ts_ny = ts.astimezone(NY_TZ)
+    day_part = _ordinal(ts_ny.day)
+    month_part = ts_ny.strftime("%B").lower()
+    date_line = f"{day_part} {month_part} {ts_ny.year}"
+    time_line = ts_ny.strftime("%I:%M %p").lstrip("0") + " ET"
+    return f"{date_line}\n{time_line}"
 
 
 class EmailProvider(Protocol):
@@ -51,10 +72,8 @@ class StubEmailProvider:
         recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
-        body = (
-            f"{tx.client_details}\n\n"
-            f"Timestamp (UTC): {tx.timestamp.isoformat()}"
-        )
+        formatted_ts = _format_ny_timestamp_lines(tx.timestamp)
+        body = f"{tx.client_details}\n\n{formatted_ts}"
 
         to_addr = recipient_email or self.to_address
 
@@ -101,10 +120,8 @@ class SmtpEmailProvider:
         recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
-        body = (
-            f"{tx.client_details}\n\n"
-            f"Timestamp (UTC): {tx.timestamp.isoformat()}"
-        )
+        formatted_ts = _format_ny_timestamp_lines(tx.timestamp)
+        body = f"{tx.client_details}\n\n{formatted_ts}"
 
         to_addr = recipient_email or self.to_address
 

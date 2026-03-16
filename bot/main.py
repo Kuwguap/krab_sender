@@ -455,6 +455,13 @@ async def _fetch_transactions_page(
 def _format_transactions_message(transactions: List[Dict]) -> str:
     from zoneinfo import ZoneInfo
 
+    def ordinal(n: int) -> str:
+        if 10 <= n % 100 <= 20:
+            suffix = "th"
+        else:
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+        return f"{n}{suffix}"
+
     ny_tz = ZoneInfo("America/New_York")
     lines: List[str] = ["📋 **Recent Transactions:**\n"]
 
@@ -462,16 +469,18 @@ def _format_transactions_message(transactions: List[Dict]) -> str:
         try:
             ts = datetime.fromisoformat(tx["timestamp_ny"].replace("Z", "+00:00"))
             ts_ny = ts.astimezone(ny_tz)
-            time_str = ts_ny.strftime("%b %d, %Y %I:%M %p ET")
+            date_line = f"{ordinal(ts_ny.day)} {ts_ny.strftime('%B').lower()} {ts_ny.year}"
+            time_line = ts_ny.strftime("%I:%M %p").lstrip("0") + " ET"
+            time_block = f"{date_line}\n      {time_line}"
         except Exception:
-            time_str = tx.get("timestamp_ny", "Unknown time")
+            time_block = tx.get("timestamp_ny", "Unknown time")
 
         status_emoji = "✅" if tx.get("delivery_status") == "DELIVERED" else "⏳"
         # Only show telegram_name, no username/handle
         lines.append(
             f"{status_emoji} **{tx['filename']}**\n"
             f"   👤 {tx['telegram_name']}\n"
-            f"   🕐 {time_str}\n"
+            f"   🕐 {time_block}\n"
         )
 
     return "\n".join(lines)
