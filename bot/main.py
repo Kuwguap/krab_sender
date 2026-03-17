@@ -100,7 +100,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await message.reply_text(
         "🏷PDF Complete✅ Thank you❗️\n\n"
-        "👤Now TYPE client info:\n\n"
+        "👤Now TYPE notes📝 :\n\n"
         f"{_get_bot_motivational()}"
     )
 
