@@ -363,6 +363,22 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         email_sent = True
 
+        # Notify issuer group that send was successful (if configured)
+        if bot_config.issuer_group_chat_id:
+            try:
+                await bot.send_message(
+                    chat_id=bot_config.issuer_group_chat_id,
+                    text=(
+                        "✅ **Send successful**\n\n"
+                        f"📄 {pending_doc['file_name']}\n"
+                        f"👤 Sent to: **{recipient_name}**\n"
+                        f"📤 By: {user.full_name}"
+                    ),
+                    parse_mode="Markdown",
+                )
+            except Exception as group_err:
+                logger.warning("Failed to notify issuer group: %s", group_err)
+
         # Mark as delivered and persist to DB.
         tx.delivery_status = "DELIVERED"
         try:

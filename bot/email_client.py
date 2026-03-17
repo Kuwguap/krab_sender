@@ -31,10 +31,10 @@ MOTIVATIONAL_MESSAGES = [
 ]
 
 
-def _format_timestamp_ny_line(ts: datetime) -> str:
+def _format_timestamp_ny_display(ts: datetime) -> str:
     """
-    Format a UTC datetime into the exact style:
-    'Timestamp March 17 2026 5:05pm' (America/New_York).
+    Format a UTC datetime for email body (America/New_York):
+    '⏰ March 17, 2026 — 5:05 PM'
     """
     ts_ny = ts.astimezone(NY_TZ)
     month = ts_ny.strftime("%B")
@@ -43,13 +43,37 @@ def _format_timestamp_ny_line(ts: datetime) -> str:
     hour_24 = ts_ny.hour
     minute = ts_ny.minute
 
-    ampm = "pm" if hour_24 >= 12 else "am"
+    ampm = "PM" if hour_24 >= 12 else "AM"
     hour_12 = hour_24 % 12
     if hour_12 == 0:
         hour_12 = 12
 
-    time_part = f"{hour_12}:{minute:02d}{ampm}"
-    return f"Timestamp {month} {day} {year} {time_part}"
+    time_part = f"{hour_12}:{minute:02d} {ampm}"
+    return f"⏰ {month} {day}, {year} — {time_part}"
+
+
+def _build_email_body(tx: Transaction) -> str:
+    """Build the full email body from the standard template."""
+    motivational = _get_motivational_message()
+    timestamp_line = _format_timestamp_ny_display(tx.timestamp)
+    return (
+        f'"{motivational}"\n\n'
+        f"{timestamp_line}\n\n"
+        "📞 Call the client NOW\n"
+        "🚘 Deliver the tag FAST\n"
+        "🧾 Upload the receipt IMMEDIATELY\n\n"
+        f"{tx.client_details}\n\n"
+        "🤖 Telegram Bot:\n"
+        "https://t.me/krableadsbot\n\n"
+        "💳 Payment Portal:\n"
+        "www.TriStateTags.com/Payments\n\n"
+        "🌐 Website:\n"
+        "www.TriStateTags.com\n\n"
+        "🤖 AI Assistant:\n"
+        "551-369-5696\n\n"
+        "👤 Owner Direct:\n"
+        "551-301-3737\n"
+    )
 
 
 def _get_motivational_message() -> str:
@@ -91,19 +115,7 @@ class StubEmailProvider:
         recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
-        timestamp_line = _format_timestamp_ny_line(tx.timestamp)
-        motivational = _get_motivational_message()
-        body = (
-            "@krabsenderbot\n\n"
-            f"{timestamp_line}\n\n"
-            f"{motivational}\n\n"
-            f"{tx.client_details}\n\n"
-            "Payment Portal:\n"
-            "Www.TriStateTags.com/Payments\n"
-            "Website:\n"
-            "Www.TriStateTags.com\n"
-        )
-
+        body = _build_email_body(tx)
         to_addr = recipient_email or self.to_address
 
         # For now we just log to stdout. Replace this with real email API calls later.
@@ -149,19 +161,7 @@ class SmtpEmailProvider:
         recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
-        timestamp_line = _format_timestamp_ny_line(tx.timestamp)
-        motivational = _get_motivational_message()
-        body = (
-            "@krabsenderbot\n\n"
-            f"{timestamp_line}\n\n"
-            f"{motivational}\n\n"
-            f"{tx.client_details}\n\n"
-            "Payment Portal:\n"
-            "Www.TriStateTags.com/Payments\n"
-            "Website:\n"
-            "Www.TriStateTags.com\n"
-        )
-
+        body = _build_email_body(tx)
         to_addr = recipient_email or self.to_address
 
         logger.info(f"Preparing email - Body length: {len(body)}, Client details length: {len(tx.client_details)}")

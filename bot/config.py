@@ -19,6 +19,7 @@ class BotConfig:
     email_smtp_username: str
     email_smtp_password: str
     api_base_url: str
+    issuer_group_chat_id: str  # Optional: Telegram chat ID to notify when send is successful
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -46,6 +47,7 @@ class BotConfig:
             email_smtp_username=os.getenv("EMAIL_SMTP_USERNAME", ""),
             email_smtp_password=os.getenv("EMAIL_SMTP_PASSWORD", ""),
             api_base_url=os.getenv("API_BASE_URL", "http://127.0.0.1:8000"),
+            issuer_group_chat_id=(os.getenv("ISSUER_GROUP_CHAT_ID") or "").strip(),
         )
 
 

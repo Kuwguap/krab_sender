@@ -28,6 +28,8 @@ services:
         sync: false
       - key: API_BASE_URL
         sync: false
+      - key: ISSUER_GROUP_CHAT_ID
+        sync: false
 
   # Backend API Service (Optional - if you want to deploy the API too)
   - type: web
