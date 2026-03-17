@@ -32,6 +32,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+BOT_MOTIVATIONAL_MESSAGES = [
+    "Paperwork handled. You just made dispatch smoother for everyone.",
+    "Every clean upload keeps your record sharp. Nice work.",
+    "You’re running your route like a business — keep stacking wins.",
+    "The best drivers stay ahead of the paperwork. You’re one of them.",
+    "Another document locked in. Stay consistent and unstoppable.",
+]
+
+
+def _get_bot_motivational() -> str:
+    # Rotate deterministically based on current minute
+    now_minute = datetime.now(timezone.utc).minute
+    idx = now_minute % len(BOT_MOTIVATIONAL_MESSAGES)
+    return BOT_MOTIVATIONAL_MESSAGES[idx]
+
+
 class State(IntEnum):
     WAITING_FOR_CLIENT_DETAILS = auto()
     WAITING_FOR_RECIPIENT = auto()
@@ -83,8 +99,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
     await message.reply_text(
-        "🏷PDF Complete✅Thank you❗️.\n\n"
-        "👤Now TYPE client info: \n"
+        "🏷PDF Complete✅ Thank you❗️\n\n"
+        "👤Now TYPE client info:\n\n"
+        f"{_get_bot_motivational()}"
     )
 
     return State.WAITING_FOR_CLIENT_DETAILS
@@ -165,7 +182,8 @@ async def handle_client_details(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         await message.reply_text(
             "👤Client info Received✅ Thank you❗️\n\n"
-            "🚘 Please Select a Driver:",
+            "🚘 Please Select a Driver:\n\n"
+            f"{_get_bot_motivational()}",
             reply_markup=keyboard,
         )
         logger.info("Successfully sent recipient selection to user %s", user.full_name)
@@ -370,6 +388,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text(
             f"🚘Email📧sent to {recipient_name}✅\n\n"
             "✅Completed🏷Successfully❗️\n\n"
+            f"{_get_bot_motivational()}\n\n"
             "📈Thank you, keep up the great work⭐️ ! \n"
             "👑🤖🦀!",
             parse_mode="Markdown"
@@ -455,13 +474,6 @@ async def _fetch_transactions_page(
 def _format_transactions_message(transactions: List[Dict]) -> str:
     from zoneinfo import ZoneInfo
 
-    def ordinal(n: int) -> str:
-        if 10 <= n % 100 <= 20:
-            suffix = "th"
-        else:
-            suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-        return f"{n}{suffix}"
-
     ny_tz = ZoneInfo("America/New_York")
     lines: List[str] = ["📋 **Recent Transactions:**\n"]
 
@@ -469,9 +481,16 @@ def _format_transactions_message(transactions: List[Dict]) -> str:
         try:
             ts = datetime.fromisoformat(tx["timestamp_ny"].replace("Z", "+00:00"))
             ts_ny = ts.astimezone(ny_tz)
-            date_line = f"{ordinal(ts_ny.day)} {ts_ny.strftime('%B').lower()} {ts_ny.year}"
-            time_line = ts_ny.strftime("%I:%M %p").lstrip("0") + " ET"
-            time_block = f"{date_line}\n      {time_line}"
+            month = ts_ny.strftime("%B")
+            day = ts_ny.day
+            year = ts_ny.year
+            hour_24 = ts_ny.hour
+            minute = ts_ny.minute
+            ampm = "pm" if hour_24 >= 12 else "am"
+            hour_12 = hour_24 % 12
+            if hour_12 == 0:
+                hour_12 = 12
+            time_block = f"{month} {day} {year} {hour_12}:{minute:02d}{ampm}"
         except Exception:
             time_block = tx.get("timestamp_ny", "Unknown time")
 

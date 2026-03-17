@@ -22,21 +22,40 @@ logger = logging.getLogger(__name__)
 NY_TZ = ZoneInfo("America/New_York")
 
 
-def _ordinal(n: int) -> str:
-    if 10 <= n % 100 <= 20:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
+MOTIVATIONAL_MESSAGES = [
+    "Every file you send is one more step toward your goals. Keep pushing.",
+    "Consistency beats intensity. You’re building something strong every day.",
+    "Small tasks handled on time become big wins over time.",
+    "Professionalism is in the details — you’re locking them in.",
+    "The best drivers stay organized; you’re running a real operation.",
+]
 
 
-def _format_ny_timestamp_lines(ts: datetime) -> str:
+def _format_timestamp_ny_line(ts: datetime) -> str:
+    """
+    Format a UTC datetime into the exact style:
+    'Timestamp March 17 2026 5:05pm' (America/New_York).
+    """
     ts_ny = ts.astimezone(NY_TZ)
-    day_part = _ordinal(ts_ny.day)
-    month_part = ts_ny.strftime("%B").lower()
-    date_line = f"{day_part} {month_part} {ts_ny.year}"
-    time_line = ts_ny.strftime("%I:%M %p").lstrip("0") + " ET"
-    return f"{date_line}\n{time_line}"
+    month = ts_ny.strftime("%B")
+    day = ts_ny.day
+    year = ts_ny.year
+    hour_24 = ts_ny.hour
+    minute = ts_ny.minute
+
+    ampm = "pm" if hour_24 >= 12 else "am"
+    hour_12 = hour_24 % 12
+    if hour_12 == 0:
+        hour_12 = 12
+
+    time_part = f"{hour_12}:{minute:02d}{ampm}"
+    return f"Timestamp {month} {day} {year} {time_part}"
+
+
+def _get_motivational_message() -> str:
+    # Simple rotation based on current minute to avoid importing random
+    idx = datetime.now(NY_TZ).minute % len(MOTIVATIONAL_MESSAGES)
+    return MOTIVATIONAL_MESSAGES[idx]
 
 
 class EmailProvider(Protocol):
@@ -72,8 +91,18 @@ class StubEmailProvider:
         recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
-        formatted_ts = _format_ny_timestamp_lines(tx.timestamp)
-        body = f"{tx.client_details}\n\n{formatted_ts}"
+        timestamp_line = _format_timestamp_ny_line(tx.timestamp)
+        motivational = _get_motivational_message()
+        body = (
+            "@krabsenderbot\n\n"
+            f"{timestamp_line}\n\n"
+            f"{motivational}\n\n"
+            f"{tx.client_details}\n\n"
+            "Payment Portal:\n"
+            "Www.TriStateTags.com/Payments\n"
+            "Website:\n"
+            "Www.TriStateTags.com\n"
+        )
 
         to_addr = recipient_email or self.to_address
 
@@ -120,8 +149,18 @@ class SmtpEmailProvider:
         recipient_email: Optional[str] = None,
     ) -> None:
         subject = "CLIENT"
-        formatted_ts = _format_ny_timestamp_lines(tx.timestamp)
-        body = f"{tx.client_details}\n\n{formatted_ts}"
+        timestamp_line = _format_timestamp_ny_line(tx.timestamp)
+        motivational = _get_motivational_message()
+        body = (
+            "@krabsenderbot\n\n"
+            f"{timestamp_line}\n\n"
+            f"{motivational}\n\n"
+            f"{tx.client_details}\n\n"
+            "Payment Portal:\n"
+            "Www.TriStateTags.com/Payments\n"
+            "Website:\n"
+            "Www.TriStateTags.com\n"
+        )
 
         to_addr = recipient_email or self.to_address
 
