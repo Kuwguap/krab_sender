@@ -1,4 +1,5 @@
-const API_BASE = "https://krab-sender.onrender.com";
+// Must point to Render's *web* service (FastAPI), not the worker.
+const API_BASE = "https://krab-sender-api.onrender.com";
 
 function formatNy(ts) {
   if (!ts) return "";

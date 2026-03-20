@@ -198,6 +198,10 @@ def options_transactions():
 def options_transactions_latest():
     return {}
 
+@app.options("/summaries/weekly/previous")
+def options_weekly_previous_summary():
+    return {}
+
 
 # Recipient management endpoints (admin only)
 class RecipientCreate(BaseModel):
