@@ -6,6 +6,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Integer,
+    inspect,
     String,
     create_engine,
     text,
@@ -54,6 +55,9 @@ class TransactionORM(Base):
     telegram_handle = Column(String, nullable=True)
     filename = Column(String, nullable=False)
     client_details = Column(String, nullable=False)
+    recipient_name = Column(String, nullable=True)
+    recipient_email = Column(String, nullable=True)
+    issuer_group = Column(String, nullable=True, index=True)
 
     # Stored in UTC, always timezone-aware on the Python side.
     timestamp_utc = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -82,5 +86,21 @@ def init_db() -> None:
     Initialize database and create tables if they don't exist.
     """
     Base.metadata.create_all(bind=engine)
+
+    # Lightweight runtime migration for older databases.
+    inspector = inspect(engine)
+    transaction_columns = {col["name"] for col in inspector.get_columns("transactions")}
+    alter_statements = []
+    if "recipient_name" not in transaction_columns:
+        alter_statements.append("ALTER TABLE transactions ADD COLUMN recipient_name VARCHAR")
+    if "recipient_email" not in transaction_columns:
+        alter_statements.append("ALTER TABLE transactions ADD COLUMN recipient_email VARCHAR")
+    if "issuer_group" not in transaction_columns:
+        alter_statements.append("ALTER TABLE transactions ADD COLUMN issuer_group VARCHAR")
+
+    if alter_statements:
+        with engine.begin() as conn:
+            for stmt in alter_statements:
+                conn.execute(text(stmt))
 
 

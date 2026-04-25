@@ -92,6 +92,9 @@ def transactions_public(limit: int = 10, offset: int = 0):
                 "telegram_name": tx.telegram_name,
                 "telegram_handle": tx.telegram_handle,
                 "filename": tx.filename,
+                "recipient_name": tx.recipient_name,
+                "recipient_email": tx.recipient_email,
+                "issuer_group": tx.issuer_group,
                 "timestamp_ny": ts_ny.isoformat(),
                 "delivery_status": tx.delivery_status,
             }
@@ -148,6 +151,9 @@ def transactions_latest():
         "telegram_handle": tx.telegram_handle,
         "filename": tx.filename,
         "client_details": tx.client_details,
+        "recipient_name": tx.recipient_name,
+        "recipient_email": tx.recipient_email,
+        "issuer_group": tx.issuer_group,
         "timestamp_ny": ts_ny.isoformat(),
         "delivery_status": tx.delivery_status,
     }
@@ -169,6 +175,9 @@ def transactions(limit: int = 100, offset: int = 0):
                 "telegram_handle": tx.telegram_handle,
                 "filename": tx.filename,
                 "client_details": tx.client_details,
+                "recipient_name": tx.recipient_name,
+                "recipient_email": tx.recipient_email,
+                "issuer_group": tx.issuer_group,
                 "timestamp_ny": ts_ny.isoformat(),
                 "delivery_status": tx.delivery_status,
             }
@@ -187,6 +196,25 @@ def weekly_previous_summary():
     return get_rolling_summary_ny(days=7)
 
 
+@app.get("/summaries/rolling", dependencies=[Depends(require_admin)])
+def rolling_summary(window: str = "1m"):
+    """
+    Returns rolling summaries for multiple windows:
+    1m, 3m, 6m, 1y, all
+    """
+    mapping = {
+        "1m": 30,
+        "3m": 90,
+        "6m": 180,
+        "1y": 365,
+        "all": None,
+    }
+    key = (window or "1m").lower()
+    if key not in mapping:
+        raise HTTPException(status_code=400, detail="Invalid window. Use: 1m, 3m, 6m, 1y, all")
+    return get_rolling_summary_ny(days=mapping[key])
+
+
 # Explicit OPTIONS handlers so browser CORS preflight succeeds from Vercel
 @app.options("/transactions")
 def options_transactions():
@@ -200,6 +228,11 @@ def options_transactions_latest():
 
 @app.options("/summaries/weekly/previous")
 def options_weekly_previous_summary():
+    return {}
+
+
+@app.options("/summaries/rolling")
+def options_rolling_summary():
     return {}
 
 

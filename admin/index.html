@@ -221,14 +221,14 @@
       .table-wrap {
         border-radius: 0.9rem;
         border: 1px solid var(--border-subtle);
-        overflow: hidden;
+        overflow: auto;
         background: radial-gradient(circle at top left, #020617, #020617 55%);
         max-height: 280px;
-        overflow-y: auto;
       }
 
       table {
         width: 100%;
+        min-width: 680px;
         border-collapse: collapse;
         font-size: 0.78rem;
       }
@@ -418,8 +418,15 @@
               <!-- Weekly summary -->
               <div>
                 <div class="panel-header" style="margin-bottom: 0.35rem">
-                  <div class="panel-title">Weekly summary (NJ time)</div>
+                  <div class="panel-title">Summary (NJ time)</div>
                   <div style="display: flex; gap: 0.4rem">
+                    <select id="summary-window" class="secondary" style="border-radius:999px;padding:0.35rem 0.6rem;background:transparent;color:var(--text-main);border:1px solid var(--border-subtle);">
+                      <option value="1m">1 month</option>
+                      <option value="3m">3 months</option>
+                      <option value="6m">6 months</option>
+                      <option value="1y">1 year</option>
+                      <option value="all">All time</option>
+                    </select>
                     <button id="summary-btn">
                       ⚡
                       <span>Generate</span>
@@ -457,6 +464,16 @@
                     </div>
                   </div>
                 </div>
+                <div class="summary-metrics" style="margin-top:0.5rem">
+                  <div class="metric">
+                    <div class="metric-label">Sensei issued/sent</div>
+                    <div id="summary-sensei" class="metric-value">0 / 0</div>
+                  </div>
+                  <div class="metric">
+                    <div class="metric-label">Highkage issued/sent</div>
+                    <div id="summary-highkage" class="metric-value">0 / 0</div>
+                  </div>
+                </div>
                 <div id="summary-status" class="small" style="margin-top: 0.4rem;">
                   Click “Generate” to view the last 7 NJ days.
                 </div>
@@ -465,8 +482,10 @@
                     <table>
                       <thead>
                         <tr>
+                          <th>#</th>
                           <th>Sender</th>
                           <th>Handle</th>
+                          <th>Driver</th>
                           <th>File</th>
                           <th>Time (NJ)</th>
                           <th>Status</th>
@@ -474,7 +493,7 @@
                       </thead>
                       <tbody id="summary-tbody">
                         <tr>
-                          <td colspan="5" class="muted">
+                          <td colspan="7" class="muted">
                             Generate a summary to see grouped results by sender.
                           </td>
                         </tr>

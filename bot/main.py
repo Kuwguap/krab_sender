@@ -317,6 +317,8 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop("selected_recipient_name", None)
         return ConversationHandler.END
 
+    application = context.application
+    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
     user = update.effective_user
     tx = Transaction.new(
         id=str(uuid.uuid4()),
@@ -324,15 +326,15 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         telegram_handle=user.username,
         filename=pending_doc["file_name"],
         client_details=client_details_text,
+        recipient_name=recipient_name,
+        recipient_email=recipient_email,
+        issuer_group=_resolve_issuer_group(user.username, bot_config),
     )
 
     # Download the file bytes from Telegram so we can attach it to the email.
     bot = context.bot
     telegram_file = await bot.get_file(pending_doc["file_id"])
     file_bytes = await telegram_file.download_as_bytearray()
-
-    application = context.application
-    bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
 
     email_provider = create_email_provider(
         provider_name=bot_config.email_provider,
@@ -515,6 +517,7 @@ def _format_transactions_message(transactions: List[Dict]) -> str:
         lines.append(
             f"{status_emoji} **{tx['filename']}**\n"
             f"   👤 {tx['telegram_name']}\n"
+            f"   🚘 Driver: {tx.get('recipient_name') or 'N/A'}\n"
             f"   🕐 {time_block}\n"
         )
 
@@ -531,6 +534,27 @@ def _build_tx_pagination_keyboard(has_prev: bool, has_next: bool, page: int):
     if row:
         buttons.append(row)
     return InlineKeyboardMarkup(buttons) if buttons else None
+
+
+def _resolve_issuer_group(user_handle: str | None, bot_config: BotConfig) -> str | None:
+    normalized = (user_handle or "").strip().lower().lstrip("@")
+    if not normalized:
+        return None
+    sensei_handles = {
+        h.strip().lower().lstrip("@")
+        for h in bot_config.sensei_group_handles.split(",")
+        if h.strip()
+    }
+    highkage_handles = {
+        h.strip().lower().lstrip("@")
+        for h in bot_config.highkage_group_handles.split(",")
+        if h.strip()
+    }
+    if normalized in sensei_handles:
+        return "sensei_group"
+    if normalized in highkage_handles:
+        return "highkage_group"
+    return None
 
 
 async def _send_transactions_page_from_message(
@@ -617,6 +641,31 @@ async def handle_transactions_button(
     await _send_transactions_page_from_callback(update, context, page=0)
 
 
+async def handle_tx_page_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle transactions pagination callbacks."""
+    query = update.callback_query
+    await query.answer()
+
+    if not _transactions_access_valid(context):
+        context.user_data["awaiting_tx_code"] = True
+        await query.edit_message_text(
+            "🔐 Access expired. Please enter the access code again."
+        )
+        return
+
+    if not query.data or not query.data.startswith("tx_page_"):
+        return
+
+    try:
+        page = max(0, int(query.data.replace("tx_page_", "")))
+    except ValueError:
+        page = 0
+
+    await _send_transactions_page_from_callback(update, context, page=page)
+
+
 async def handle_tx_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle user entering the transactions access code.
@@ -680,6 +729,7 @@ def build_application(config: BotConfig):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("transactions", show_transactions))
     app.add_handler(CallbackQueryHandler(handle_transactions_button, pattern="^view_transactions$"))
+    app.add_handler(CallbackQueryHandler(handle_tx_page_callback, pattern=r"^tx_page_\d+$"))
     # Conversation handler should come before generic text handlers
     app.add_handler(conv_handler)
     # Handler for access code input (comes after conversation handler to avoid conflicts)

@@ -175,7 +175,7 @@ function renderSummaryTable(summary) {
   if (items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5;
+    td.colSpan = 7;
     td.className = "muted";
     td.textContent = "No transmissions in this summary window.";
     tr.appendChild(td);
@@ -195,6 +195,7 @@ function renderSummaryTable(summary) {
 
   const senderKeys = Object.keys(grouped).sort();
 
+  let rowNum = 1;
   for (const key of senderKeys) {
     const [name, handle] = key.split("||");
     const senderItems = grouped[key];
@@ -202,7 +203,7 @@ function renderSummaryTable(summary) {
     // Optional: a small separator row per sender (visually lightweight)
     const sep = document.createElement("tr");
     const sepTd = document.createElement("td");
-    sepTd.colSpan = 5;
+    sepTd.colSpan = 7;
     sepTd.className = "small";
     sepTd.textContent = `${name} ${handle ? "(" + handle + ")" : ""} · ${
       senderItems.length
@@ -213,6 +214,10 @@ function renderSummaryTable(summary) {
     for (const it of senderItems) {
       const tr = document.createElement("tr");
 
+      const tdNum = document.createElement("td");
+      tdNum.textContent = String(rowNum++);
+      tr.appendChild(tdNum);
+
       const tdSender = document.createElement("td");
       tdSender.textContent = name;
       tr.appendChild(tdSender);
@@ -220,6 +225,10 @@ function renderSummaryTable(summary) {
       const tdHandle = document.createElement("td");
       tdHandle.textContent = handle || "—";
       tr.appendChild(tdHandle);
+
+      const tdDriver = document.createElement("td");
+      tdDriver.textContent = it.recipient_name || "—";
+      tr.appendChild(tdDriver);
 
       const tdFile = document.createElement("td");
       tdFile.textContent = it.filename;
@@ -245,13 +254,28 @@ function downloadSummaryCsv() {
   }
 
   const rows = [
-    ["SenderName", "SenderHandle", "Filename", "Time_NJ", "Status"],
+    [
+      "Row",
+      "SenderName",
+      "SenderHandle",
+      "IssuerGroup",
+      "DriverName",
+      "DriverEmail",
+      "Filename",
+      "Time_NJ",
+      "Status",
+    ],
   ];
 
-  for (const it of lastSummary.items) {
+  for (let i = 0; i < lastSummary.items.length; i += 1) {
+    const it = lastSummary.items[i];
     rows.push([
+      i + 1,
       it.telegram_name || "",
       it.telegram_handle || "",
+      it.issuer_group || "",
+      it.recipient_name || "",
+      it.recipient_email || "",
       it.filename || "",
       formatNy(it.timestamp_ny || ""),
       (it.delivery_status || "").toUpperCase(),
@@ -285,31 +309,45 @@ function downloadSummaryCsv() {
 }
 
 async function refreshSummary() {
+  const windowEl = document.getElementById("summary-window");
   const periodEl = document.getElementById("summary-period");
   const totalEl = document.getElementById("summary-total");
   const deliveredEl = document.getElementById("summary-delivered");
   const pfEl = document.getElementById("summary-pending-failed");
+  const senseiEl = document.getElementById("summary-sensei");
+  const highkageEl = document.getElementById("summary-highkage");
   const statusEl = document.getElementById("summary-status");
 
   try {
+    const windowKey = (windowEl && windowEl.value) || "1m";
     if (statusEl) {
-      statusEl.textContent = "Generating 7‑day summary (America/New_York)...";
+      statusEl.textContent = "Generating summary (America/New_York)...";
     }
-    const data = await fetchWithAdmin("/summaries/weekly/previous");
+    const data = await fetchWithAdmin(`/summaries/rolling?window=${windowKey}`);
     lastSummary = data;
-    periodEl.textContent = `${formatNy(
-      data.period_start_ny
-    )} → ${formatNy(data.period_end_ny)}`;
+    periodEl.textContent =
+      data.period_start_ny && data.period_end_ny
+        ? `${formatNy(data.period_start_ny)} → ${formatNy(data.period_end_ny)}`
+        : `All time → ${formatNy(data.period_end_ny)}`;
     totalEl.textContent = `${data.total_transactions} total`;
     deliveredEl.textContent = data.delivered;
     pfEl.textContent = `${data.pending} / ${data.failed}`;
+    const sensei = (data.group_counts && data.group_counts.sensei_group) || {
+      issued: 0,
+      sent: 0,
+    };
+    const highkage = (data.group_counts && data.group_counts.highkage_group) || {
+      issued: 0,
+      sent: 0,
+    };
+    senseiEl.textContent = `${sensei.issued} / ${sensei.sent}`;
+    highkageEl.textContent = `${highkage.issued} / ${highkage.sent}`;
     if (statusEl) {
       if (data.total_transactions === 0) {
         statusEl.textContent =
-          "No transmissions in the last 7 NJ days. This is expected if you just started using the bot.";
+          "No transmissions in this selected window.";
       } else {
-        statusEl.textContent =
-          "Summary generated for the last 7 NJ days.";
+        statusEl.textContent = "Summary generated successfully.";
       }
     }
 

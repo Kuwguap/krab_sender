@@ -20,6 +20,8 @@ class BotConfig:
     email_smtp_password: str
     api_base_url: str
     issuer_group_chat_id: str  # Optional: Telegram chat ID to notify when send is successful
+    sensei_group_handles: str
+    highkage_group_handles: str
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -48,6 +50,8 @@ class BotConfig:
             email_smtp_password=os.getenv("EMAIL_SMTP_PASSWORD", ""),
             api_base_url=os.getenv("API_BASE_URL", "http://127.0.0.1:8000"),
             issuer_group_chat_id=(os.getenv("ISSUER_GROUP_CHAT_ID") or "").strip(),
+            sensei_group_handles=(os.getenv("SENSEI_GROUP_HANDLES") or "").strip(),
+            highkage_group_handles=(os.getenv("HIGHKAGE_GROUP_HANDLES") or "").strip(),
         )
 
 

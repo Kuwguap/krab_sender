@@ -36,6 +36,9 @@ def save_transaction(tx: Transaction) -> None:
         telegram_handle=tx.telegram_handle,
         filename=tx.filename,
         client_details=tx.client_details,
+        recipient_name=tx.recipient_name,
+        recipient_email=tx.recipient_email,
+        issuer_group=tx.issuer_group,
         timestamp_utc=tx.timestamp,
         delivery_status=tx.delivery_status,
     )
@@ -66,6 +69,9 @@ def list_transactions(limit: int = 100, offset: int = 0) -> List[Transaction]:
                 telegram_handle=row.telegram_handle,
                 filename=row.filename,
                 client_details=row.client_details,
+                recipient_name=row.recipient_name,
+                recipient_email=row.recipient_email,
+                issuer_group=row.issuer_group,
                 timestamp=row.timestamp_utc,
                 delivery_status=row.delivery_status,
             )
@@ -91,6 +97,9 @@ def get_latest_transaction() -> Optional[Transaction]:
             telegram_handle=row.telegram_handle,
             filename=row.filename,
             client_details=row.client_details,
+            recipient_name=row.recipient_name,
+            recipient_email=row.recipient_email,
+            issuer_group=row.issuer_group,
             timestamp=row.timestamp_utc,
             delivery_status=row.delivery_status,
         )
@@ -99,7 +108,7 @@ def get_latest_transaction() -> Optional[Transaction]:
 
 
 def get_rolling_summary_ny(
-    days: int = 7, reference_utc: Optional[datetime] = None
+    days: Optional[int] = 7, reference_utc: Optional[datetime] = None
 ) -> dict:
     """
     Build a summary for the last `days` days in America/New_York time.
@@ -116,25 +125,30 @@ def get_rolling_summary_ny(
     ref_ny = reference_utc.astimezone(NY_TZ)
 
     # Rolling window bounds in NY
-    start_ny = (ref_ny - timedelta(days=days)).replace(microsecond=0)
+    start_ny = (
+        (ref_ny - timedelta(days=days)).replace(microsecond=0)
+        if days is not None
+        else None
+    )
     end_ny = ref_ny.replace(microsecond=0)
 
     # Convert back to UTC for querying
-    start_utc = start_ny.astimezone(timezone.utc)
+    start_utc = start_ny.astimezone(timezone.utc) if start_ny else None
     end_utc = end_ny.astimezone(timezone.utc)
 
     with get_session() as session:
-        rows: List[TransactionORM] = (
-            session.query(TransactionORM)
-            .filter(TransactionORM.timestamp_utc >= start_utc)
-            .filter(TransactionORM.timestamp_utc <= end_utc)
-            .order_by(TransactionORM.timestamp_utc.asc())
-            .all()
-        )
+        query = session.query(TransactionORM).filter(TransactionORM.timestamp_utc <= end_utc)
+        if start_utc is not None:
+            query = query.filter(TransactionORM.timestamp_utc >= start_utc)
+        rows: List[TransactionORM] = query.order_by(TransactionORM.timestamp_utc.asc()).all()
 
         # Compute aggregates and transform rows while session is open
         items = []
         delivered = pending = failed = 0
+        group_counts = {
+            "sensei_group": {"issued": 0, "sent": 0},
+            "highkage_group": {"issued": 0, "sent": 0},
+        }
         for r in rows:
             status = (r.delivery_status or "").upper()
             if status == "DELIVERED":
@@ -144,12 +158,21 @@ def get_rolling_summary_ny(
             else:
                 failed += 1
 
+            issuer_group = (r.issuer_group or "").strip().lower()
+            if issuer_group in group_counts:
+                group_counts[issuer_group]["issued"] += 1
+                if status == "DELIVERED":
+                    group_counts[issuer_group]["sent"] += 1
+
             items.append(
                 {
                     "id": r.id,
                     "telegram_name": r.telegram_name,
                     "telegram_handle": r.telegram_handle,
                     "filename": r.filename,
+                    "recipient_name": r.recipient_name,
+                    "recipient_email": r.recipient_email,
+                    "issuer_group": r.issuer_group,
                     "timestamp_ny": r.timestamp_utc.astimezone(NY_TZ).isoformat(),
                     "delivery_status": r.delivery_status,
                 }
@@ -158,12 +181,14 @@ def get_rolling_summary_ny(
         total = len(rows)
 
     summary = {
-        "period_start_ny": start_ny.isoformat(),
+        "period_start_ny": start_ny.isoformat() if start_ny else None,
         "period_end_ny": end_ny.isoformat(),
+        "window_days": days,
         "total_transactions": total,
         "delivered": delivered,
         "pending": pending,
         "failed": failed,
+        "group_counts": group_counts,
         "items": items,
     }
 
