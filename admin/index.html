@@ -28,6 +28,7 @@
           sans-serif;
         background: radial-gradient(circle at top, #0f172a 0, #020617 50%);
         color: var(--text-main);
+        text-align: center;
         min-height: 100vh;
         display: flex;
         align-items: center;
@@ -55,12 +56,30 @@
         align-items: center;
         gap: 1rem;
         margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+      }
+
+      .header-main {
+        flex: 1 1 100%;
+        text-align: center;
       }
 
       .title {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 0.75rem;
+        white-space: nowrap;
+      }
+
+      .title .brand-name {
+        white-space: nowrap;
+      }
+
+      .title-meta {
+        margin-top: 0.35rem;
+        display: flex;
+        justify-content: center;
       }
 
       .badge {
@@ -129,6 +148,19 @@
         .grid {
           grid-template-columns: minmax(0, 1fr);
         }
+
+        .header {
+          justify-content: center;
+        }
+
+        .header-main {
+          order: 1;
+        }
+
+        .status-pill {
+          order: 2;
+          margin: 0 auto;
+        }
       }
 
       .panel {
@@ -148,6 +180,7 @@
         justify-content: space-between;
         gap: 0.5rem;
         margin-bottom: 0.9rem;
+        text-align: center;
       }
 
       .panel-title {
@@ -240,7 +273,7 @@
       th,
       td {
         padding: 0.55rem 0.7rem;
-        text-align: left;
+        text-align: center;
         border-bottom: 1px solid rgba(31, 41, 55, 0.8);
         white-space: nowrap;
       }
@@ -330,10 +363,12 @@
     <div class="shell">
       <div class="card">
         <div class="header">
-          <div>
+          <div class="header-main">
             <div class="title">
               <span class="krab">🦀</span>
-              <span>Krab Sender Admin</span>
+              <span class="brand-name">Krab Sender Admin</span>
+            </div>
+            <div class="title-meta">
               <span class="badge">NJ Time · America/New_York</span>
             </div>
             <div class="muted">
@@ -360,15 +395,16 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Time (UTC)</th>
+                    <th>Time (NJ)</th>
                     <th>Client / File</th>
                     <th>Telegram</th>
+                    <th>Driver Lead Sent To</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody id="tx-body">
                   <tr>
-                    <td colspan="4" class="muted">
+                    <td colspan="5" class="muted">
                       Waiting for data... send a document through the bot.
                     </td>
                   </tr>
@@ -421,6 +457,7 @@
                   <div class="panel-title">Summary (NJ time)</div>
                   <div style="display: flex; gap: 0.4rem">
                     <select id="summary-window" class="secondary" style="border-radius:999px;padding:0.35rem 0.6rem;background:transparent;color:var(--text-main);border:1px solid var(--border-subtle);">
+                      <option value="1w" selected>1 week</option>
                       <option value="1m">1 month</option>
                       <option value="3m">3 months</option>
                       <option value="6m">6 months</option>

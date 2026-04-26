@@ -87,7 +87,7 @@ function renderTransactions(items) {
   if (!items || items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 4;
+    td.colSpan = 5;
     td.className = "muted";
     td.textContent = "No transmissions yet.";
     tr.appendChild(td);
@@ -111,6 +111,16 @@ function renderTransactions(items) {
       tx.telegram_handle ? "(@" + tx.telegram_handle + ")" : ""
     }`;
     tr.appendChild(tdTelegram);
+
+    const tdDriver = document.createElement("td");
+    if (tx.recipient_name || tx.recipient_email) {
+      tdDriver.textContent = `${tx.recipient_name || "Unknown"}${
+        tx.recipient_email ? " (" + tx.recipient_email + ")" : ""
+      }`;
+    } else {
+      tdDriver.textContent = "Not recorded";
+    }
+    tr.appendChild(tdDriver);
 
     const tdStatus = document.createElement("td");
     tdStatus.className = "status";
@@ -156,6 +166,9 @@ async function refreshLatest() {
       data.telegram_handle ? "(@" + data.telegram_handle + ")" : ""
     } · ${formatNy(data.timestamp_ny)}
       </div>
+      <div class="small">Driver lead: ${data.recipient_name || "Not recorded"}${
+      data.recipient_email ? " (" + data.recipient_email + ")" : ""
+    }</div>
       <div class="small">Status: ${data.delivery_status}</div>
     `;
   } catch (e) {
@@ -359,7 +372,7 @@ async function refreshSummary() {
   const statusEl = document.getElementById("summary-status");
 
   try {
-    const windowKey = (windowEl && windowEl.value) || "1m";
+    const windowKey = (windowEl && windowEl.value) || "1w";
     if (statusEl) {
       statusEl.textContent = "Generating summary (America/New_York)...";
     }
@@ -389,7 +402,7 @@ async function refreshSummary() {
           "Summary generated. Group split is approximate until backend issuer-group fields are deployed.";
       } else {
         statusEl.textContent =
-          windowKey === "1m"
+          windowKey === "1w"
             ? "Summary generated successfully."
             : "Weekly summary loaded. Deploy latest backend to enable custom windows.";
       }

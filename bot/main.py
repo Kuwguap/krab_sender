@@ -1,9 +1,11 @@
 import asyncio
+import json
 import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum, auto
+from pathlib import Path
 from typing import List, Dict
 
 import httpx
@@ -32,13 +34,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-BOT_MOTIVATIONAL_MESSAGES = [
+MOTIVATION_FILE = Path(__file__).with_name("motivation.json")
+FALLBACK_MOTIVATIONS = [
     "Paperwork handled. You just made dispatch smoother for everyone.",
     "Every clean upload keeps your record sharp. Nice work.",
-    "You’re running your route like a business — keep stacking wins.",
-    "The best drivers stay ahead of the paperwork. You’re one of them.",
+    "You are running your route like a business. Keep stacking wins.",
+    "The best drivers stay ahead of paperwork. You are one of them.",
     "Another document locked in. Stay consistent and unstoppable.",
 ]
+
+
+def _load_motivational_messages() -> List[str]:
+    try:
+        raw = json.loads(MOTIVATION_FILE.read_text(encoding="utf-8"))
+        if isinstance(raw, list):
+            cleaned = [str(x).strip() for x in raw if str(x).strip()]
+            if cleaned:
+                return cleaned
+    except Exception as e:
+        logger.warning("Failed to load motivation file: %s", e)
+    return FALLBACK_MOTIVATIONS
+
+
+BOT_MOTIVATIONAL_MESSAGES = _load_motivational_messages()
 
 
 def _get_bot_motivational() -> str:
@@ -65,6 +83,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "🦀 Welcome to Krab Sender!\n\n"
         "🏷Please upload PDF Document.\n\n"
+        f"{_get_bot_motivational()}\n\n"
         "👑🤖🦀.\n\n",
         reply_markup=keyboard,
     )
@@ -521,7 +540,8 @@ def _format_transactions_message(transactions: List[Dict]) -> str:
         lines.append(
             f"{status_emoji} **{tx['filename']}**\n"
             f"   👤 {tx['telegram_name']}\n"
-            f"   🚘 Driver: {tx.get('recipient_name') or 'N/A'}\n"
+            f"   🚘 Driver lead sent to: {tx.get('recipient_name') or 'Not recorded'}"
+            f"{' (' + tx.get('recipient_email') + ')' if tx.get('recipient_email') else ''}\n"
             f"   🕐 {time_block}\n"
         )
 
