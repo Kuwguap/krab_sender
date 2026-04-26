@@ -22,12 +22,9 @@ logger = logging.getLogger(__name__)
 NY_TZ = ZoneInfo("America/New_York")
 
 
+# Single fixed opening line for outbound emails (matches product messaging).
 MOTIVATIONAL_MESSAGES = [
-    "Every file you send is one more step toward your goals. Keep pushing.",
-    "Consistency beats intensity. You’re building something strong every day.",
     "Small tasks handled on time become big wins over time.",
-    "Professionalism is in the details — you’re locking them in.",
-    "The best drivers stay organized; you’re running a real operation.",
 ]
 
 
@@ -59,19 +56,25 @@ def _build_email_body(tx: Transaction) -> str:
     return (
         f'"{motivational}"\n\n'
         f"{timestamp_line}\n\n"
-        "📞 Call the client NOW\n"
-        "🚘 Deliver the tag FAST\n"
-        "🧾 Upload the receipt IMMEDIATELY\n\n"
+        "📞 Call the client NOW⚡️- 15 minute timer ⏱️\n"
+        "🚘 Deliver the tag FAST⚡️- 1 hour timer ⏱️\n"
+        "🧾 Upload the receipt IMMEDIATELY⚡️- 1 minute timer ⏱️\n\n"
+        "🚨Client must pay dealership directly🚨\n"
+        "💳 We Must collect all electronic payments: 💲\n"
+        "CashApp: $TriStateTags\n"
+        "Venmo: @TriStateTags\n"
+        "Zelle: OrganizeDataOnline@gmail.com\n"
+        "PayPal: privatedealership@gmail.com\n\n"
         f"{tx.client_details}\n\n"
         "🤖 Telegram Bot:\n"
         "https://t.me/krableadsbot\n\n"
         "💳 Payment Portal:\n"
-        "www.TriStateTags.com/Payments\n\n"
+        "www.TriStateTags.com/Payments (http://www.tristatetags.com/Payments)\n\n"
         "🌐 Website:\n"
-        "www.TriStateTags.com\n\n"
+        "www.TriStateTags.com (http://www.tristatetags.com/)\n\n"
         "🤖 AI Assistant:\n"
         "551-369-5696\n\n"
-        "👤 Owner Direct:\n"
+        "👤 Owner Cellphone:\n"
         "551-301-3737\n"
     )
 
