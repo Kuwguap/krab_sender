@@ -90,7 +90,7 @@ function formatNy(ts) {
     hours = hours % 12;
     if (hours === 0) hours = 12;
 
-    return `Timestamp ${month} ${day} ${year} ${hours}:${minutes}${ampm.toLowerCase()}`;
+    return `${month} ${day} ${year} ${hours}:${minutes}${ampm.toLowerCase()}`;
   } catch {
     return ts;
   }
