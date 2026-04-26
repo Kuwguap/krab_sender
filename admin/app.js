@@ -6,7 +6,7 @@
 // Highkage handle split override:
 //   ?highkage=kingkrab,haruhatsu
 // or set localStorage key `krab_highkage_handles` to a comma-separated handle list
-// (without @). Defaults include both haruhatsu and kingkrab.
+// (without @). Default highkage handle: haruhatsu
 const DEFAULT_API_BASE = "https://krab-sender-api.onrender.com";
 
 function resolveApiBase() {
@@ -66,7 +66,7 @@ function resolveHighkageHandleSet() {
     // ignore
   }
 
-  return new Set(["haruhatsu", "kingkrab"]);
+  return new Set(["haruhatsu"]);
 }
 
 const HIGHKAGE_FALLBACK_HANDLES = resolveHighkageHandleSet();
@@ -452,46 +452,35 @@ function downloadSummaryCsv() {
   URL.revokeObjectURL(url);
 }
 
-function deriveGroupCountsFallback(data) {
+/**
+ * Issuer team totals for the dashboard.
+ *
+ * Important: do NOT trust `issuer_group` alone — production data may label
+ * highkage senders (e.g. @haruhatsu) as sensei. Telegram handle list wins.
+ */
+function deriveGroupCountsForDashboard(data) {
   const items = (data && data.items) || [];
   const counts = {
     sensei_group: { issued: 0, sent: 0 },
     highkage_group: { issued: 0, sent: 0 },
   };
 
-  let hasIssuerGroupData = false;
   for (const it of items) {
     const status = (it.delivery_status || "").toUpperCase();
-    const group = (it.issuer_group || "").toLowerCase();
-    if (group === "sensei_group" || group === "highkage_group") {
-      hasIssuerGroupData = true;
-      counts[group].issued += 1;
-      if (status === "DELIVERED") {
-        counts[group].sent += 1;
-      }
+    const handle = String(it.telegram_handle || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, "");
+    const bucket = HIGHKAGE_FALLBACK_HANDLES.has(handle)
+      ? "highkage_group"
+      : "sensei_group";
+    counts[bucket].issued += 1;
+    if (status === "DELIVERED") {
+      counts[bucket].sent += 1;
     }
   }
 
-  // Legacy payload fallback: classify by Telegram handle when issuer_group
-  // is not present in backend payloads yet.
-  if (!hasIssuerGroupData) {
-    for (const it of items) {
-      const status = (it.delivery_status || "").toUpperCase();
-      const handle = String(it.telegram_handle || "")
-        .trim()
-        .toLowerCase()
-        .replace(/^@/, "");
-      const bucket = HIGHKAGE_FALLBACK_HANDLES.has(handle)
-        ? "highkage_group"
-        : "sensei_group";
-      counts[bucket].issued += 1;
-      if (status === "DELIVERED") {
-        counts[bucket].sent += 1;
-      }
-    }
-  }
-
-  return { counts, hasIssuerGroupData };
+  return counts;
 }
 
 function windowKeyToDays(windowKey) {
@@ -647,12 +636,9 @@ async function refreshSummary() {
     totalEl.textContent = `${data.total_transactions} total`;
     deliveredEl.textContent = data.delivered;
     pfEl.textContent = `${data.pending} / ${data.failed}`;
-    const apiSensei = data.group_counts && data.group_counts.sensei_group;
-    const apiHighkage = data.group_counts && data.group_counts.highkage_group;
-    const { counts: fallbackCounts, hasIssuerGroupData } =
-      deriveGroupCountsFallback(data);
-    const sensei = apiSensei || fallbackCounts.sensei_group;
-    const highkage = apiHighkage || fallbackCounts.highkage_group;
+    const counts = deriveGroupCountsForDashboard(data);
+    const sensei = counts.sensei_group;
+    const highkage = counts.highkage_group;
     senseiEl.textContent = `${sensei.issued} / ${sensei.sent}`;
     highkageEl.textContent = `${highkage.issued} / ${highkage.sent}`;
     if (statusEl) {
