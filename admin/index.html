@@ -311,9 +311,77 @@
 
       .summary-metrics {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 0.6rem;
         margin-top: 0.4rem;
+      }
+
+      .summary-metrics-issuer {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-width: 100%;
+      }
+
+      @media (max-width: 640px) {
+        .summary-metrics:not(.summary-metrics-issuer) {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      .summary-section-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 0.65rem 0.75rem;
+      }
+
+      .summary-section-header .panel-title {
+        flex: 1 0 100%;
+        text-align: center;
+        margin: 0;
+      }
+
+      @media (min-width: 700px) {
+        .summary-section-header {
+          flex-wrap: nowrap;
+          align-items: center;
+        }
+        .summary-section-header .panel-title {
+          flex: 0 0 auto;
+          text-align: left;
+        }
+      }
+
+      .summary-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+        justify-content: flex-end;
+        min-width: 0;
+        flex: 1 1 100%;
+      }
+
+      @media (min-width: 700px) {
+        .summary-toolbar {
+          flex: 0 1 auto;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .summary-toolbar {
+          width: 100%;
+          justify-content: stretch;
+        }
+        .summary-toolbar #summary-window {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .summary-toolbar #summary-btn {
+          flex: 0 0 auto;
+        }
+        .summary-toolbar #summary-download-btn {
+          flex: 1 1 100%;
+          justify-content: center;
+        }
       }
 
       .metric {
@@ -450,10 +518,17 @@
 
               <!-- Weekly summary -->
               <div>
-                <div class="panel-header" style="margin-bottom: 0.35rem">
+                <div
+                  class="panel-header summary-section-header"
+                  style="margin-bottom: 0.35rem"
+                >
                   <div class="panel-title">Summary (NJ time)</div>
-                  <div style="display: flex; gap: 0.4rem">
-                    <select id="summary-window" class="secondary" style="border-radius:999px;padding:0.35rem 0.6rem;background:transparent;color:var(--text-main);border:1px solid var(--border-subtle);">
+                  <div class="summary-toolbar">
+                    <select
+                      id="summary-window"
+                      class="secondary"
+                      style="border-radius:999px;padding:0.35rem 0.6rem;background:transparent;color:var(--text-main);border:1px solid var(--border-subtle);"
+                    >
                       <option value="1w" selected>1 week</option>
                       <option value="1m">1 month</option>
                       <option value="3m">3 months</option>
@@ -461,11 +536,11 @@
                       <option value="1y">1 year</option>
                       <option value="all">All time</option>
                     </select>
-                    <button id="summary-btn">
+                    <button id="summary-btn" type="button">
                       ⚡
                       <span>Generate</span>
                     </button>
-                    <button id="summary-download-btn" class="secondary">
+                    <button id="summary-download-btn" class="secondary" type="button">
                       ⬇
                       <span>Download CSV</span>
                     </button>
@@ -478,6 +553,10 @@
                   <div class="metric">
                     <div class="metric-label">Total</div>
                     <div id="summary-total" class="metric-value">0</div>
+                  </div>
+                  <div class="metric">
+                    <div class="metric-label">Revenue</div>
+                    <div id="summary-revenue" class="metric-value">$0</div>
                   </div>
                   <div class="metric">
                     <div class="metric-label">Delivered</div>
@@ -498,7 +577,10 @@
                     </div>
                   </div>
                 </div>
-                <div class="summary-metrics" style="margin-top:0.5rem">
+                <div
+                  class="summary-metrics summary-metrics-issuer"
+                  style="margin-top: 0.5rem"
+                >
                   <div class="metric">
                     <div class="metric-label">Sensei issued/sent</div>
                     <div id="summary-sensei" class="metric-value">0 / 0</div>

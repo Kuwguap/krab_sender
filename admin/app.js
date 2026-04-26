@@ -96,6 +96,15 @@ function formatNy(ts) {
   }
 }
 
+function formatRevenueUsd(totalCount) {
+  const n = Number(totalCount) || 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n * 100);
+}
+
 function getStoredPassword() {
   try {
     return localStorage.getItem("krab_admin_password") || "";
@@ -591,6 +600,7 @@ async function refreshSummary() {
   const windowEl = document.getElementById("summary-window");
   const periodEl = document.getElementById("summary-period");
   const totalEl = document.getElementById("summary-total");
+  const revenueEl = document.getElementById("summary-revenue");
   const deliveredEl = document.getElementById("summary-delivered");
   const pfEl = document.getElementById("summary-pending-failed");
   const senseiEl = document.getElementById("summary-sensei");
@@ -624,6 +634,9 @@ async function refreshSummary() {
         ? `${formatNy(data.period_start_ny)} → ${formatNy(data.period_end_ny)}`
         : `All time → ${formatNy(data.period_end_ny)}`;
     totalEl.textContent = `${data.total_transactions} total`;
+    if (revenueEl) {
+      revenueEl.textContent = formatRevenueUsd(data.total_transactions);
+    }
     deliveredEl.textContent = data.delivered;
     pfEl.textContent = `${data.pending} / ${data.failed}`;
     const counts = deriveGroupCountsForDashboard(data);
@@ -642,6 +655,10 @@ async function refreshSummary() {
     renderSummaryTable(data);
   } catch (e) {
     console.error(e);
+    const revenueOnErr = document.getElementById("summary-revenue");
+    if (revenueOnErr) {
+      revenueOnErr.textContent = "—";
+    }
     if (statusEl) {
       statusEl.textContent =
         e && e.message && String(e.message).startsWith("NETWORK:")
