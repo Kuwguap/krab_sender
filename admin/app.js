@@ -204,7 +204,7 @@ function renderTransactions(items) {
   if (!items || items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5;
+    td.colSpan = 6;
     td.className = "muted";
     td.textContent = "No transmissions yet.";
     tr.appendChild(td);
@@ -212,8 +212,12 @@ function renderTransactions(items) {
     return;
   }
 
-  for (const tx of items) {
+  items.forEach((tx, index) => {
     const tr = document.createElement("tr");
+
+    const tdNum = document.createElement("td");
+    tdNum.textContent = String(index + 1);
+    tr.appendChild(tdNum);
 
     const tdTime = document.createElement("td");
     tdTime.textContent = formatNy(tx.timestamp_ny);
@@ -252,7 +256,7 @@ function renderTransactions(items) {
     tr.appendChild(tdStatus);
 
     body.appendChild(tr);
-  }
+  });
 }
 
 async function refreshTransactions() {
@@ -268,7 +272,7 @@ async function refreshTransactions() {
     body.innerHTML = "";
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5;
+    td.colSpan = 6;
     td.className = "muted";
     td.textContent =
       (e && e.message && String(e.message).startsWith("NETWORK:")
