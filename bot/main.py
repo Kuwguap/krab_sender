@@ -323,10 +323,28 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     # User confirmed - proceed with sending
     pending_doc = context.user_data.get("pending_document")
     client_details_text = context.user_data.get("client_details")
+    recipient_id = context.user_data.get("selected_recipient_id")
     recipient_email = context.user_data.get("selected_recipient_email")
     recipient_name = context.user_data.get("selected_recipient_name")
 
-    if not pending_doc or not client_details_text or not recipient_email:
+    # Forward-step validation: if recipient metadata is incomplete in session,
+    # refresh it from API before sending so DB records always include driver lead.
+    if recipient_id and (not recipient_email or not recipient_name):
+        application = context.application
+        bot_config: BotConfig = application.bot_data["config"]  # type: ignore[assignment]
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{bot_config.api_base_url}/recipients/{recipient_id}/email"
+                )
+                if response.status_code == 200:
+                    recipient_data = response.json()
+                    recipient_email = recipient_email or recipient_data.get("email")
+                    recipient_name = recipient_name or recipient_data.get("name")
+        except Exception as refresh_err:
+            logger.warning("Failed to refresh recipient details at confirm step: %s", refresh_err)
+
+    if not pending_doc or not client_details_text or not recipient_email or not recipient_name:
         await query.edit_message_text("❌ Session expired. Please start over.")
         # Clear context
         context.user_data.pop("pending_document", None)

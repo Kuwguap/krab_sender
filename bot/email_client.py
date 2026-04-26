@@ -114,7 +114,7 @@ class StubEmailProvider:
         attachment_filename: Optional[str],
         recipient_email: Optional[str] = None,
     ) -> None:
-        subject = "CLIENT"
+        subject = "NEW CLIENT"
         body = _build_email_body(tx)
         to_addr = recipient_email or self.to_address
 
@@ -160,7 +160,7 @@ class SmtpEmailProvider:
         attachment_filename: Optional[str],
         recipient_email: Optional[str] = None,
     ) -> None:
-        subject = "CLIENT"
+        subject = "NEW CLIENT"
         body = _build_email_body(tx)
         to_addr = recipient_email or self.to_address
 
