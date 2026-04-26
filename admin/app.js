@@ -1,5 +1,33 @@
-// Must point to Render's *web* service (FastAPI), not the worker.
-const API_BASE = "https://krab-sender-api.onrender.com";
+// Must point to Render *web* service (FastAPI), not the worker.
+// Override (no code change): add ?api=https%3A%2F%2Fyour-api.onrender.com
+// to the admin URL, or set localStorage key `krab_api_base` to a full base URL
+// (no trailing slash), then reload.
+const DEFAULT_API_BASE = "https://krab-sender-api.onrender.com";
+
+function resolveApiBase() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = (params.get("api") || "").trim();
+    if (fromQuery.startsWith("https://") || fromQuery.startsWith("http://")) {
+      const normalized = fromQuery.replace(/\/+$/, "");
+      localStorage.setItem("krab_api_base", normalized);
+      return normalized;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const stored = (localStorage.getItem("krab_api_base") || "").trim();
+    if (stored.startsWith("https://") || stored.startsWith("http://")) {
+      return stored.replace(/\/+$/, "");
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_API_BASE;
+}
+
+const API_BASE = resolveApiBase();
 
 function formatNy(ts) {
   if (!ts) return "";
@@ -50,10 +78,16 @@ async function fetchWithAdmin(path, opts = {}) {
   const headers = Object.assign({}, opts.headers || {}, {
     "X-Admin-Password": pw,
   });
-  const res = await fetch(API_BASE + path, {
+  let res;
+  try {
+    res = await fetch(API_BASE + path, {
     ...opts,
     headers,
   });
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    throw new Error("NETWORK: " + msg);
+  }
   if (res.status === 401) {
     throw new Error("UNAUTHORIZED");
   }
@@ -72,12 +106,14 @@ async function checkHealth() {
     if (data.status === "ok") {
       pill.querySelector(".dot").classList.remove("dot-bad");
       pill.querySelector(".dot").classList.add("dot-ok");
-      text.textContent = "Bot & API healthy";
+      text.textContent = "API online · " + API_BASE;
     } else {
-      text.textContent = "API responding with errors";
+      text.textContent = "API up but health check is not OK";
     }
   } catch (e) {
-    text.textContent = "Unable to reach API";
+    pill.querySelector(".dot").classList.remove("dot-ok");
+    pill.querySelector(".dot").classList.add("dot-bad");
+    text.textContent = "API unreachable (check Render) · " + API_BASE;
   }
 }
 
@@ -143,11 +179,28 @@ function renderTransactions(items) {
 }
 
 async function refreshTransactions() {
+  const body = document.getElementById("tx-body");
   try {
     const data = await fetchWithAdmin("/transactions");
     renderTransactions(data);
   } catch (e) {
     console.error(e);
+    if (!body) {
+      return;
+    }
+    body.innerHTML = "";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.className = "muted";
+    td.textContent =
+      (e && e.message && String(e.message).startsWith("NETWORK:")
+        ? "API unreachable. Check Render service and network, or point admin to the correct API. Base: " +
+          API_BASE
+        : "Failed to load data. " + (e && e.message ? e.message : "")) +
+      "";
+    tr.appendChild(td);
+    body.appendChild(tr);
   }
 }
 
@@ -173,6 +226,12 @@ async function refreshLatest() {
     `;
   } catch (e) {
     console.error(e);
+    if (el) {
+      el.textContent =
+        (e && e.message && String(e.message).startsWith("NETWORK:")
+          ? "API unreachable. Base: " + API_BASE
+          : "Failed to load latest. " + (e && e.message ? e.message : ""));
+    }
   }
 }
 
@@ -412,7 +471,10 @@ async function refreshSummary() {
   } catch (e) {
     console.error(e);
     if (statusEl) {
-      statusEl.textContent = "Failed to load summary. Check console/network.";
+      statusEl.textContent =
+        e && e.message && String(e.message).startsWith("NETWORK:")
+          ? "API unreachable. Check Render service, then try again. Base: " + API_BASE
+          : "Failed to load summary. " + (e && e.message ? e.message : "");
     }
   }
 }
