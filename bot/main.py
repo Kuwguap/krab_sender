@@ -328,7 +328,11 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         client_details=client_details_text,
         recipient_name=recipient_name,
         recipient_email=recipient_email,
-        issuer_group=_resolve_issuer_group(user.username, bot_config),
+        issuer_group=_resolve_issuer_group(
+            user.username,
+            update.effective_chat.id if update.effective_chat else None,
+            bot_config,
+        ),
     )
 
     # Download the file bytes from Telegram so we can attach it to the email.
@@ -536,7 +540,17 @@ def _build_tx_pagination_keyboard(has_prev: bool, has_next: bool, page: int):
     return InlineKeyboardMarkup(buttons) if buttons else None
 
 
-def _resolve_issuer_group(user_handle: str | None, bot_config: BotConfig) -> str | None:
+def _resolve_issuer_group(
+    user_handle: str | None, chat_id: int | None, bot_config: BotConfig
+) -> str | None:
+    # Primary rule: explicit team chat ID mapping.
+    if chat_id is not None:
+        highkage_chat = (bot_config.highkage_team_chat_id or "").strip()
+        if highkage_chat and str(chat_id) == highkage_chat:
+            return "highkage_group"
+        return "sensei_group"
+
+    # Backward-compatible fallback by handle list.
     normalized = (user_handle or "").strip().lower().lstrip("@")
     if not normalized:
         return None
