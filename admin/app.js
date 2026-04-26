@@ -2,6 +2,11 @@
 // Override (no code change): add ?api=https%3A%2F%2Fyour-api.onrender.com
 // to the admin URL, or set localStorage key `krab_api_base` to a full base URL
 // (no trailing slash), then reload.
+//
+// Highkage handle split override:
+//   ?highkage=kingkrab,haruhatsu
+// or set localStorage key `krab_highkage_handles` to a comma-separated handle list
+// (without @). Defaults include both haruhatsu and kingkrab.
 const DEFAULT_API_BASE = "https://krab-sender-api.onrender.com";
 
 function resolveApiBase() {
@@ -28,6 +33,43 @@ function resolveApiBase() {
 }
 
 const API_BASE = resolveApiBase();
+
+function resolveHighkageHandleSet() {
+  const parseList = (raw) => {
+    return String(raw || "")
+      .split(",")
+      .map((h) => h.trim().toLowerCase().replace(/^@/, ""))
+      .filter(Boolean);
+  };
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = (params.get("highkage") || "").trim();
+    if (fromQuery) {
+      const handles = parseList(fromQuery);
+      if (handles.length > 0) {
+        localStorage.setItem("krab_highkage_handles", handles.join(","));
+        return new Set(handles);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const stored = (localStorage.getItem("krab_highkage_handles") || "").trim();
+    const handles = parseList(stored);
+    if (handles.length > 0) {
+      return new Set(handles);
+    }
+  } catch {
+    // ignore
+  }
+
+  return new Set(["haruhatsu", "kingkrab"]);
+}
+
+const HIGHKAGE_FALLBACK_HANDLES = resolveHighkageHandleSet();
 
 function formatNy(ts) {
   if (!ts) return "";
@@ -236,7 +278,6 @@ async function refreshLatest() {
 }
 
 let lastSummary = null;
-const HIGHKAGE_FALLBACK_HANDLES = new Set(["haruhatsu"]);
 
 function renderSummaryTable(summary) {
   const tbody = document.getElementById("summary-tbody");
@@ -406,7 +447,10 @@ function deriveGroupCountsFallback(data) {
   if (!hasIssuerGroupData) {
     for (const it of items) {
       const status = (it.delivery_status || "").toUpperCase();
-      const handle = (it.telegram_handle || "").toLowerCase().replace(/^@/, "");
+      const handle = String(it.telegram_handle || "")
+        .trim()
+        .toLowerCase()
+        .replace(/^@/, "");
       const bucket = HIGHKAGE_FALLBACK_HANDLES.has(handle)
         ? "highkage_group"
         : "sensei_group";
@@ -418,6 +462,116 @@ function deriveGroupCountsFallback(data) {
   }
 
   return { counts, hasIssuerGroupData };
+}
+
+function windowKeyToDays(windowKey) {
+  const k = (windowKey || "1w").toLowerCase();
+  const map = {
+    "1w": 7,
+    "1m": 30,
+    "3m": 90,
+    "6m": 180,
+    "1y": 365,
+    all: null,
+  };
+  return map[k] === undefined ? 7 : map[k];
+}
+
+function parseItemTimeMs(item) {
+  const raw = (item && item.timestamp_ny) || "";
+  if (!raw) {
+    return NaN;
+  }
+  const t = new Date(raw);
+  const ms = t.getTime();
+  return Number.isNaN(ms) ? NaN : ms;
+}
+
+async function fetchAllAdminTransactions() {
+  const all = [];
+  const pageSize = 500;
+  let offset = 0;
+  const maxItems = 20000;
+  while (all.length < maxItems) {
+    const page = await fetchWithAdmin(
+      "/transactions?limit=" + pageSize + "&offset=" + offset
+    );
+    if (!page || page.length === 0) {
+      break;
+    }
+    for (const row of page) {
+      all.push(row);
+    }
+    if (page.length < pageSize) {
+      break;
+    }
+    offset += pageSize;
+  }
+  return all;
+}
+
+function buildClientWindowSummary(allTx, windowKey) {
+  const nowMs = Date.now();
+  const days = windowKeyToDays(windowKey);
+  const startMs = days == null ? null : nowMs - days * 24 * 60 * 60 * 1000;
+
+  const filtered = [];
+  for (const it of allTx) {
+    const tms = parseItemTimeMs(it);
+    if (Number.isNaN(tms)) {
+      continue;
+    }
+    if (startMs == null || tms >= startMs) {
+      filtered.push(it);
+    }
+  }
+  filtered.sort((a, b) => parseItemTimeMs(a) - parseItemTimeMs(b));
+
+  let delivered = 0;
+  let pending = 0;
+  let failed = 0;
+  for (const it of filtered) {
+    const status = (it.delivery_status || "").toUpperCase();
+    if (status === "DELIVERED") {
+      delivered += 1;
+    } else if (status === "PENDING") {
+      pending += 1;
+    } else {
+      failed += 1;
+    }
+  }
+
+  const firstItemMs = filtered.length > 0 ? parseItemTimeMs(filtered[0]) : NaN;
+  const lastItemMs =
+    filtered.length > 0
+      ? parseItemTimeMs(filtered[filtered.length - 1])
+      : NaN;
+
+  let periodStartMs = nowMs;
+  if (filtered.length > 0 && !Number.isNaN(firstItemMs)) {
+    periodStartMs = firstItemMs;
+  } else if (startMs != null) {
+    periodStartMs = startMs;
+  } else {
+    // "all" and no data: use now as a harmless anchor for formatting
+    periodStartMs = nowMs;
+  }
+
+  let periodEndMs = nowMs;
+  if (filtered.length > 0 && !Number.isNaN(lastItemMs)) {
+    periodEndMs = lastItemMs;
+  }
+
+  return {
+    period_start_ny: new Date(periodStartMs).toISOString(),
+    period_end_ny: new Date(periodEndMs).toISOString(),
+    total_transactions: filtered.length,
+    delivered,
+    pending,
+    failed,
+    items: filtered,
+    _client_window: true,
+  };
 }
 
 async function refreshSummary() {
@@ -433,10 +587,10 @@ async function refreshSummary() {
   try {
     const windowKey = (windowEl && windowEl.value) || "1w";
     if (statusEl) {
-      statusEl.textContent = "Generating summary (America/New_York)...";
+      statusEl.textContent = "Loading transaction history for summary...";
     }
-    // Production backend currently supports weekly endpoint reliably.
-    const data = await fetchWithAdmin("/summaries/weekly/previous");
+    const allTx = await fetchAllAdminTransactions();
+    const data = buildClientWindowSummary(allTx, windowKey);
     lastSummary = data;
     periodEl.textContent =
       data.period_start_ny && data.period_end_ny
@@ -455,15 +609,9 @@ async function refreshSummary() {
     highkageEl.textContent = `${highkage.issued} / ${highkage.sent}`;
     if (statusEl) {
       if (data.total_transactions === 0) {
-        statusEl.textContent = "No transmissions in the weekly summary window.";
-      } else if (!apiSensei && !apiHighkage && !hasIssuerGroupData) {
-        statusEl.textContent =
-          "Summary generated. Group split is approximate until backend issuer-group fields are deployed.";
+        statusEl.textContent = "No transmissions in the selected window.";
       } else {
-        statusEl.textContent =
-          windowKey === "1w"
-            ? "Summary generated successfully."
-            : "Weekly summary loaded. Deploy latest backend to enable custom windows.";
+        statusEl.textContent = "Summary generated successfully.";
       }
     }
 
