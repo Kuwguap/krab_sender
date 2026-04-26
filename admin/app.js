@@ -308,6 +308,37 @@ function downloadSummaryCsv() {
   URL.revokeObjectURL(url);
 }
 
+function deriveGroupCountsFallback(data) {
+  const items = (data && data.items) || [];
+  const counts = {
+    sensei_group: { issued: 0, sent: 0 },
+    highkage_group: { issued: 0, sent: 0 },
+  };
+
+  let hasIssuerGroupData = false;
+  for (const it of items) {
+    const status = (it.delivery_status || "").toUpperCase();
+    const group = (it.issuer_group || "").toLowerCase();
+    if (group === "sensei_group" || group === "highkage_group") {
+      hasIssuerGroupData = true;
+      counts[group].issued += 1;
+      if (status === "DELIVERED") {
+        counts[group].sent += 1;
+      }
+    }
+  }
+
+  // Legacy payload fallback: no issuer_group in items, so treat as unclassified.
+  if (!hasIssuerGroupData) {
+    const total = Number(data?.total_transactions || 0);
+    const delivered = Number(data?.delivered || 0);
+    counts.sensei_group.issued = total;
+    counts.sensei_group.sent = delivered;
+  }
+
+  return { counts, hasIssuerGroupData };
+}
+
 async function refreshSummary() {
   const windowEl = document.getElementById("summary-window");
   const periodEl = document.getElementById("summary-period");
@@ -323,7 +354,8 @@ async function refreshSummary() {
     if (statusEl) {
       statusEl.textContent = "Generating summary (America/New_York)...";
     }
-    const data = await fetchWithAdmin(`/summaries/rolling?window=${windowKey}`);
+    // Production backend currently supports weekly endpoint reliably.
+    const data = await fetchWithAdmin("/summaries/weekly/previous");
     lastSummary = data;
     periodEl.textContent =
       data.period_start_ny && data.period_end_ny
@@ -332,22 +364,25 @@ async function refreshSummary() {
     totalEl.textContent = `${data.total_transactions} total`;
     deliveredEl.textContent = data.delivered;
     pfEl.textContent = `${data.pending} / ${data.failed}`;
-    const sensei = (data.group_counts && data.group_counts.sensei_group) || {
-      issued: 0,
-      sent: 0,
-    };
-    const highkage = (data.group_counts && data.group_counts.highkage_group) || {
-      issued: 0,
-      sent: 0,
-    };
+    const apiSensei = data.group_counts && data.group_counts.sensei_group;
+    const apiHighkage = data.group_counts && data.group_counts.highkage_group;
+    const { counts: fallbackCounts, hasIssuerGroupData } =
+      deriveGroupCountsFallback(data);
+    const sensei = apiSensei || fallbackCounts.sensei_group;
+    const highkage = apiHighkage || fallbackCounts.highkage_group;
     senseiEl.textContent = `${sensei.issued} / ${sensei.sent}`;
     highkageEl.textContent = `${highkage.issued} / ${highkage.sent}`;
     if (statusEl) {
       if (data.total_transactions === 0) {
+        statusEl.textContent = "No transmissions in the weekly summary window.";
+      } else if (!apiSensei && !apiHighkage && !hasIssuerGroupData) {
         statusEl.textContent =
-          "No transmissions in this selected window.";
+          "Summary generated. Group split is approximate until backend issuer-group fields are deployed.";
       } else {
-        statusEl.textContent = "Summary generated successfully.";
+        statusEl.textContent =
+          windowKey === "1m"
+            ? "Summary generated successfully."
+            : "Weekly summary loaded. Deploy latest backend to enable custom windows.";
       }
     }
 
