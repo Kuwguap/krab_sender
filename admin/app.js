@@ -164,6 +164,7 @@ async function refreshLatest() {
 }
 
 let lastSummary = null;
+const HIGHKAGE_FALLBACK_HANDLES = new Set(["haruhatsu"]);
 
 function renderSummaryTable(summary) {
   const tbody = document.getElementById("summary-tbody");
@@ -328,12 +329,20 @@ function deriveGroupCountsFallback(data) {
     }
   }
 
-  // Legacy payload fallback: no issuer_group in items, so treat as unclassified.
+  // Legacy payload fallback: classify by Telegram handle when issuer_group
+  // is not present in backend payloads yet.
   if (!hasIssuerGroupData) {
-    const total = Number(data?.total_transactions || 0);
-    const delivered = Number(data?.delivered || 0);
-    counts.sensei_group.issued = total;
-    counts.sensei_group.sent = delivered;
+    for (const it of items) {
+      const status = (it.delivery_status || "").toUpperCase();
+      const handle = (it.telegram_handle || "").toLowerCase().replace(/^@/, "");
+      const bucket = HIGHKAGE_FALLBACK_HANDLES.has(handle)
+        ? "highkage_group"
+        : "sensei_group";
+      counts[bucket].issued += 1;
+      if (status === "DELIVERED") {
+        counts[bucket].sent += 1;
+      }
+    }
   }
 
   return { counts, hasIssuerGroupData };
