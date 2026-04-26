@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, List, Optional
 
+from sqlalchemy import func
 from zoneinfo import ZoneInfo
 
 from .db import SessionLocal, TransactionORM, RecipientORM
@@ -136,49 +137,53 @@ def get_rolling_summary_ny(
     start_utc = start_ny.astimezone(timezone.utc) if start_ny else None
     end_utc = end_ny.astimezone(timezone.utc)
 
-    with get_session() as session:
-        query = session.query(TransactionORM).filter(TransactionORM.timestamp_utc <= end_utc)
-        if start_utc is not None:
-            query = query.filter(TransactionORM.timestamp_utc >= start_utc)
-        rows: List[TransactionORM] = query.order_by(TransactionORM.timestamp_utc.asc()).all()
+    # Cap row payload for the dashboard: large windows (e.g. 6m) used to load every
+    # ORM row and OOM/timeout on Render, which surfaced as 502/CORS in the browser.
+    max_items = 5000
 
-        # Compute aggregates and transform rows while session is open
-        items = []
-        delivered = pending = failed = 0
-        group_counts = {
+    with get_session() as session:
+        base = session.query(TransactionORM).filter(
+            TransactionORM.timestamp_utc <= end_utc
+        )
+        if start_utc is not None:
+            base = base.filter(TransactionORM.timestamp_utc >= start_utc)
+
+        status_u = func.upper(func.coalesce(TransactionORM.delivery_status, "PENDING"))
+        total = base.count()
+        delivered = base.filter(status_u == "DELIVERED").count()
+        pending = base.filter(status_u == "PENDING").count()
+        failed = max(0, total - delivered - pending)
+
+        group_counts: dict = {
             "sensei_group": {"issued": 0, "sent": 0},
             "highkage_group": {"issued": 0, "sent": 0},
         }
-        for r in rows:
-            status = (r.delivery_status or "").upper()
-            if status == "DELIVERED":
-                delivered += 1
-            elif status == "PENDING":
-                pending += 1
-            else:
-                failed += 1
+        ig = func.lower(func.coalesce(TransactionORM.issuer_group, ""))
+        for gkey in ("sensei_group", "highkage_group"):
+            gq = base.filter(ig == gkey)
+            group_counts[gkey]["issued"] = gq.count()
+            group_counts[gkey]["sent"] = gq.filter(status_u == "DELIVERED").count()
 
-            issuer_group = (r.issuer_group or "").strip().lower()
-            if issuer_group in group_counts:
-                group_counts[issuer_group]["issued"] += 1
-                if status == "DELIVERED":
-                    group_counts[issuer_group]["sent"] += 1
+        # Most-recent N rows for the table (chronological within the cap).
+        rows: List[TransactionORM] = (
+            base.order_by(TransactionORM.timestamp_utc.desc()).limit(max_items).all()
+        )
+        rows = list(reversed(rows))
 
-            items.append(
-                {
-                    "id": r.id,
-                    "telegram_name": r.telegram_name,
-                    "telegram_handle": r.telegram_handle,
-                    "filename": r.filename,
-                    "recipient_name": r.recipient_name,
-                    "recipient_email": r.recipient_email,
-                    "issuer_group": r.issuer_group,
-                    "timestamp_ny": r.timestamp_utc.astimezone(NY_TZ).isoformat(),
-                    "delivery_status": r.delivery_status,
-                }
-            )
-
-        total = len(rows)
+        items = [
+            {
+                "id": r.id,
+                "telegram_name": r.telegram_name,
+                "telegram_handle": r.telegram_handle,
+                "filename": r.filename,
+                "recipient_name": r.recipient_name,
+                "recipient_email": r.recipient_email,
+                "issuer_group": r.issuer_group,
+                "timestamp_ny": r.timestamp_utc.astimezone(NY_TZ).isoformat(),
+                "delivery_status": r.delivery_status,
+            }
+            for r in rows
+        ]
 
     summary = {
         "period_start_ny": start_ny.isoformat() if start_ny else None,
@@ -190,6 +195,7 @@ def get_rolling_summary_ny(
         "failed": failed,
         "group_counts": group_counts,
         "items": items,
+        "items_omitted": max(0, total - max_items),
     }
 
     return summary

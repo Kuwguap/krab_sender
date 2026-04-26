@@ -639,16 +639,33 @@ async function refreshSummary() {
     }
     deliveredEl.textContent = data.delivered;
     pfEl.textContent = `${data.pending} / ${data.failed}`;
-    const counts = deriveGroupCountsForDashboard(data);
-    const sensei = counts.sensei_group;
-    const highkage = counts.highkage_group;
+    const fallbackCounts = deriveGroupCountsForDashboard(data);
+    const apiGc = data.group_counts;
+    const useApiGroupCounts =
+      apiGc &&
+      apiGc.sensei_group &&
+      apiGc.highkage_group &&
+      !data._client_window;
+    const sensei = useApiGroupCounts
+      ? apiGc.sensei_group
+      : fallbackCounts.sensei_group;
+    const highkage = useApiGroupCounts
+      ? apiGc.highkage_group
+      : fallbackCounts.highkage_group;
     senseiEl.textContent = `${sensei.issued} / ${sensei.sent}`;
     highkageEl.textContent = `${highkage.issued} / ${highkage.sent}`;
     if (statusEl) {
       if (data.total_transactions === 0) {
         statusEl.textContent = "No transmissions in the selected window.";
       } else {
-        statusEl.textContent = "Summary generated successfully.";
+        const omitted = Number(data.items_omitted) || 0;
+        const extra =
+          omitted > 0
+            ? ` Table lists the latest ${
+                (data.items && data.items.length) || 0
+              } rows; ${omitted} older rows are omitted from the table.`
+            : "";
+        statusEl.textContent = "Summary generated successfully." + extra;
       }
     }
 
