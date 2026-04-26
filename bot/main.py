@@ -86,14 +86,14 @@ def _format_dt_ny_pretty(utc_dt: datetime) -> str:
     return f"{month} {day} {year} {hour_12}:{minute:02d}{ampm}"
 
 
-def _format_send_success_text(
-    filename: str, issuer_label: str, driver_name: str, when_ny: str
-) -> str:
+def _format_send_complete_message(driver_name: str) -> str:
+    quote = _get_bot_motivational()
     return (
-        f"✅ {filename}\n"
-        f"   👤 Issuer: {issuer_label}\n"
-        f"   🚘 Driver: {driver_name}\n"
-        f"   🕐 {when_ny}"
+        f"🚘Email📧sent to {driver_name}✅\n\n"
+        "✅Completed🏷Successfully❗️\n\n"
+        f"{quote}\n\n"
+        "📈Thank you, keep up the great work⭐️ ! \n"
+        "👑🤖🦀!"
     )
 
 
@@ -460,19 +460,11 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as db_error:
             logger.error("Email sent successfully but failed to save to database: %s", db_error, exc_info=True)
             # Email was sent, so we still show success but warn about DB issue
-            _issuer = (user.first_name or user.full_name or "Unknown").strip()
-            _when = _format_dt_ny_pretty(datetime.now(timezone.utc))
             await query.edit_message_text(
-                _format_send_success_text(
-                    pending_doc["file_name"],
-                    _issuer,
-                    recipient_name,
-                    _when,
-                )
+                _format_send_complete_message(recipient_name)
                 + "\n\n"
                 "⚠️ Note: There was an issue saving the record to the database, "
-                "but your email was delivered successfully.\n"
-                "Keep up the good work👑🤖🦀!",
+                "but your email was delivered successfully.",
                 parse_mode=None,
             )
             # Clear context
@@ -483,30 +475,16 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data.pop("selected_recipient_name", None)
             return ConversationHandler.END
 
-        _issuer = (user.first_name or user.full_name or "Unknown").strip()
-        _when = _format_dt_ny_pretty(datetime.now(timezone.utc))
         await query.edit_message_text(
-            _format_send_success_text(
-                pending_doc["file_name"],
-                _issuer,
-                recipient_name,
-                _when,
-            ),
+            _format_send_complete_message(recipient_name),
             parse_mode=None,
         )
     except Exception as e:
         logger.error("Failed to send email: %s", e, exc_info=True)
         if email_sent:
             # Email was sent but something else failed
-            _issuer = (user.first_name or user.full_name or "Unknown").strip()
-            _when = _format_dt_ny_pretty(datetime.now(timezone.utc))
             await query.edit_message_text(
-                _format_send_success_text(
-                    pending_doc["file_name"],
-                    _issuer,
-                    recipient_name,
-                    _when,
-                )
+                _format_send_complete_message(recipient_name)
                 + "\n\n"
                 "⚠️ There was an issue recording the transaction, "
                 "but your email was delivered successfully.",
