@@ -22,15 +22,13 @@ NY_TZ = ZoneInfo("America/New_York")
 
 app = FastAPI(title="Krab Sender Admin API")
 
-# CORS so the Vercel admin frontend can call this API.
+_cfg_for_cors = ApiConfig.from_env()
+# CORS: explicit origins (prod + local) + regex to cover Vercel preview deploy URLs.
+# Configure via CORS_ORIGINS and CORS_ORIGIN_REGEX in backend config.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://krab-sender.vercel.app",  # your Vercel admin URL
-        "https://krabsender.vercel.app",   # if using this alias
-        "http://127.0.0.1:8000",           # local dev
-        "http://localhost:8000",
-    ],
+    allow_origins=list(_cfg_for_cors.cors_origins),
+    allow_origin_regex=_cfg_for_cors.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -200,9 +198,10 @@ def weekly_previous_summary():
 def rolling_summary(window: str = "1m"):
     """
     Returns rolling summaries for multiple windows:
-    1m, 3m, 6m, 1y, all
+    1w, 1m, 3m, 6m, 1y, all
     """
     mapping = {
+        "1w": 7,
         "1m": 30,
         "3m": 90,
         "6m": 180,
@@ -211,7 +210,10 @@ def rolling_summary(window: str = "1m"):
     }
     key = (window or "1m").lower()
     if key not in mapping:
-        raise HTTPException(status_code=400, detail="Invalid window. Use: 1m, 3m, 6m, 1y, all")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid window. Use: 1w, 1m, 3m, 6m, 1y, all",
+        )
     return get_rolling_summary_ny(days=mapping[key])
 
 

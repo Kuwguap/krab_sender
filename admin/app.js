@@ -139,6 +139,36 @@ async function fetchWithAdmin(path, opts = {}) {
   return res.json();
 }
 
+// Like fetchWithAdmin, but does not throw on non-2xx; callers can branch.
+async function requestWithAdminJson(path, opts = {}) {
+  const pw = getStoredPassword();
+  if (!pw) {
+    return { ok: false, status: 0, error: "NO_PASSWORD" };
+  }
+  const headers = Object.assign({}, opts.headers || {}, {
+    "X-Admin-Password": pw,
+  });
+  let res;
+  try {
+    res = await fetch(API_BASE + path, { ...opts, headers });
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    return { ok: false, status: 0, error: "NETWORK: " + msg };
+  }
+  if (res.status === 401) {
+    return { ok: false, status: res.status, error: "UNAUTHORIZED" };
+  }
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: "HTTP_" + res.status };
+  }
+  try {
+    const data = await res.json();
+    return { ok: true, status: res.status, data };
+  } catch (e) {
+    return { ok: false, status: res.status, error: "BAD_JSON" };
+  }
+}
+
 async function checkHealth() {
   const pill = document.getElementById("status-pill");
   const text = document.getElementById("status-text");
@@ -489,13 +519,17 @@ function parseItemTimeMs(item) {
 
 async function fetchAllAdminTransactions() {
   const all = [];
-  const pageSize = 500;
+  const pageSize = 200;
   let offset = 0;
   const maxItems = 20000;
   while (all.length < maxItems) {
-    const page = await fetchWithAdmin(
+    const pageRes = await requestWithAdminJson(
       "/transactions?limit=" + pageSize + "&offset=" + offset
     );
+    if (!pageRes.ok) {
+      throw new Error(pageRes.error || "FAILED_PAGE");
+    }
+    const page = pageRes.data;
     if (!page || page.length === 0) {
       break;
     }
@@ -587,10 +621,24 @@ async function refreshSummary() {
   try {
     const windowKey = (windowEl && windowEl.value) || "1w";
     if (statusEl) {
-      statusEl.textContent = "Loading transaction history for summary...";
+      statusEl.textContent = "Loading summary (NJ)...";
     }
-    const allTx = await fetchAllAdminTransactions();
-    const data = buildClientWindowSummary(allTx, windowKey);
+
+    // Primary path: server-side rolling window summary (avoids large /transactions scans).
+    const rollRes = await requestWithAdminJson(
+      "/summaries/rolling?window=" + encodeURIComponent(windowKey)
+    );
+    let data = null;
+    if (rollRes.ok) {
+      data = rollRes.data;
+    } else {
+      if (statusEl) {
+        statusEl.textContent =
+          "Rolling summary API unavailable, building summary locally (can be slow)...";
+      }
+      const allTx = await fetchAllAdminTransactions();
+      data = buildClientWindowSummary(allTx, windowKey);
+    }
     lastSummary = data;
     periodEl.textContent =
       data.period_start_ny && data.period_end_ny
