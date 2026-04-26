@@ -221,10 +221,8 @@ function renderTransactions(items) {
     tr.appendChild(tdTelegram);
 
     const tdDriver = document.createElement("td");
-    if (tx.recipient_name || tx.recipient_email) {
-      tdDriver.textContent = `${tx.recipient_name || "Unknown"}${
-        tx.recipient_email ? " (" + tx.recipient_email + ")" : ""
-      }`;
+    if (tx.recipient_name) {
+      tdDriver.textContent = tx.recipient_name;
     } else {
       tdDriver.textContent = "Not recorded";
     }
@@ -291,9 +289,7 @@ async function refreshLatest() {
       data.telegram_handle ? "(@" + data.telegram_handle + ")" : ""
     } · ${formatNy(data.timestamp_ny)}
       </div>
-      <div class="small">Driver lead: ${data.recipient_name || "Not recorded"}${
-      data.recipient_email ? " (" + data.recipient_email + ")" : ""
-    }</div>
+      <div class="small">Driver: ${data.recipient_name || "Not recorded"}</div>
       <div class="small">Status: ${data.delivery_status}</div>
     `;
   } catch (e) {
@@ -404,7 +400,6 @@ function downloadSummaryCsv() {
       "SenderHandle",
       "IssuerGroup",
       "DriverName",
-      "DriverEmail",
       "Filename",
       "Time_NJ",
       "Status",
@@ -419,7 +414,6 @@ function downloadSummaryCsv() {
       it.telegram_handle || "",
       it.issuer_group || "",
       it.recipient_name || "",
-      it.recipient_email || "",
       it.filename || "",
       formatNy(it.timestamp_ny || ""),
       (it.delivery_status || "").toUpperCase(),

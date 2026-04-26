@@ -66,6 +66,37 @@ def _get_bot_motivational() -> str:
     return BOT_MOTIVATIONAL_MESSAGES[idx]
 
 
+def _format_dt_ny_pretty(utc_dt: datetime) -> str:
+    """e.g. April 26 2026 12:28pm (America/New_York)."""
+    from zoneinfo import ZoneInfo
+
+    ny_tz = ZoneInfo("America/New_York")
+    if utc_dt.tzinfo is None:
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+    ts_ny = utc_dt.astimezone(ny_tz)
+    month = ts_ny.strftime("%B")
+    day = ts_ny.day
+    year = ts_ny.year
+    hour_24 = ts_ny.hour
+    minute = ts_ny.minute
+    ampm = "pm" if hour_24 >= 12 else "am"
+    hour_12 = hour_24 % 12
+    if hour_12 == 0:
+        hour_12 = 12
+    return f"{month} {day} {year} {hour_12}:{minute:02d}{ampm}"
+
+
+def _format_send_success_text(
+    filename: str, issuer_label: str, driver_name: str, when_ny: str
+) -> str:
+    return (
+        f"✅ {filename}\n"
+        f"   👤 Issuer: {issuer_label}\n"
+        f"   🚘 Driver: {driver_name}\n"
+        f"   🕐 {when_ny}"
+    )
+
+
 class State(IntEnum):
     WAITING_FOR_CLIENT_DETAILS = auto()
     WAITING_FOR_RECIPIENT = auto()
@@ -412,12 +443,12 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await bot.send_message(
                     chat_id=bot_config.issuer_group_chat_id,
                     text=(
-                        "✅ **Send successful**\n\n"
+                        f"✅ Send successful\n\n"
                         f"📄 {pending_doc['file_name']}\n"
-                        f"👤 Sent to: **{recipient_name}**\n"
-                        f"📤 By: {user.full_name}"
+                        f"🚘 Driver: {recipient_name}\n"
+                        f"👤 Issuer: {user.full_name}"
                     ),
-                    parse_mode="Markdown",
+                    parse_mode=None,
                 )
             except Exception as group_err:
                 logger.warning("Failed to notify issuer group: %s", group_err)
@@ -429,12 +460,20 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as db_error:
             logger.error("Email sent successfully but failed to save to database: %s", db_error, exc_info=True)
             # Email was sent, so we still show success but warn about DB issue
+            _issuer = (user.first_name or user.full_name or "Unknown").strip()
+            _when = _format_dt_ny_pretty(datetime.now(timezone.utc))
             await query.edit_message_text(
-                f"✅ Document sent to **{recipient_name}**!\n\n"
+                _format_send_success_text(
+                    pending_doc["file_name"],
+                    _issuer,
+                    recipient_name,
+                    _when,
+                )
+                + "\n\n"
                 "⚠️ Note: There was an issue saving the record to the database, "
                 "but your email was delivered successfully.\n"
                 "Keep up the good work👑🤖🦀!",
-                parse_mode="Markdown"
+                parse_mode=None,
             )
             # Clear context
             context.user_data.pop("pending_document", None)
@@ -444,23 +483,34 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data.pop("selected_recipient_name", None)
             return ConversationHandler.END
 
+        _issuer = (user.first_name or user.full_name or "Unknown").strip()
+        _when = _format_dt_ny_pretty(datetime.now(timezone.utc))
         await query.edit_message_text(
-            f"🚘Email📧sent to {recipient_name}✅\n\n"
-            "✅Completed🏷Successfully❗️\n\n"
-            f"{_get_bot_motivational()}\n\n"
-            "📈Thank you, keep up the great work⭐️ ! \n"
-            "👑🤖🦀!",
-            parse_mode="Markdown"
+            _format_send_success_text(
+                pending_doc["file_name"],
+                _issuer,
+                recipient_name,
+                _when,
+            ),
+            parse_mode=None,
         )
     except Exception as e:
         logger.error("Failed to send email: %s", e, exc_info=True)
         if email_sent:
             # Email was sent but something else failed
+            _issuer = (user.first_name or user.full_name or "Unknown").strip()
+            _when = _format_dt_ny_pretty(datetime.now(timezone.utc))
             await query.edit_message_text(
-                f"✅ Document sent to **{recipient_name}**!\n\n"
+                _format_send_success_text(
+                    pending_doc["file_name"],
+                    _issuer,
+                    recipient_name,
+                    _when,
+                )
+                + "\n\n"
                 "⚠️ There was an issue recording the transaction, "
                 "but your email was delivered successfully.",
-                parse_mode="Markdown"
+                parse_mode=None,
             )
         else:
             # Email sending failed
@@ -531,35 +581,20 @@ async def _fetch_transactions_page(
 
 
 def _format_transactions_message(transactions: List[Dict]) -> str:
-    from zoneinfo import ZoneInfo
-
-    ny_tz = ZoneInfo("America/New_York")
-    lines: List[str] = ["📋 **Recent Transactions:**\n"]
+    lines: List[str] = ["📋 Recent Transactions:\n"]
 
     for tx in transactions[:10]:
         try:
             ts = datetime.fromisoformat(tx["timestamp_ny"].replace("Z", "+00:00"))
-            ts_ny = ts.astimezone(ny_tz)
-            month = ts_ny.strftime("%B")
-            day = ts_ny.day
-            year = ts_ny.year
-            hour_24 = ts_ny.hour
-            minute = ts_ny.minute
-            ampm = "pm" if hour_24 >= 12 else "am"
-            hour_12 = hour_24 % 12
-            if hour_12 == 0:
-                hour_12 = 12
-            time_block = f"{month} {day} {year} {hour_12}:{minute:02d}{ampm}"
+            time_block = _format_dt_ny_pretty(ts)
         except Exception:
             time_block = tx.get("timestamp_ny", "Unknown time")
 
         status_emoji = "✅" if tx.get("delivery_status") == "DELIVERED" else "⏳"
-        # Only show telegram_name, no username/handle
         lines.append(
-            f"{status_emoji} **{tx['filename']}**\n"
-            f"   👤 {tx['telegram_name']}\n"
-            f"   🚘 Driver lead sent to: {tx.get('recipient_name') or 'Not recorded'}"
-            f"{' (' + tx.get('recipient_email') + ')' if tx.get('recipient_email') else ''}\n"
+            f"{status_emoji} {tx['filename']}\n"
+            f"   👤 Issuer: {tx['telegram_name']}\n"
+            f"   🚘 Driver: {tx.get('recipient_name') or 'Not recorded'}\n"
             f"   🕐 {time_block}\n"
         )
 
@@ -614,7 +649,7 @@ async def _send_transactions_page_from_message(
     await update.message.reply_text(
         text,
         reply_markup=keyboard,
-        parse_mode="Markdown",
+        parse_mode=None,
     )
 
 
@@ -640,7 +675,7 @@ async def _send_transactions_page_from_callback(
     await query.edit_message_text(
         text,
         reply_markup=keyboard,
-        parse_mode="Markdown",
+        parse_mode=None,
     )
 
 
