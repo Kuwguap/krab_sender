@@ -543,32 +543,16 @@ def _build_tx_pagination_keyboard(has_prev: bool, has_next: bool, page: int):
 def _resolve_issuer_group(
     user_handle: str | None, chat_id: int | None, bot_config: BotConfig
 ) -> str | None:
-    # Primary rule: explicit team chat ID mapping.
-    if chat_id is not None:
-        highkage_chat = (bot_config.highkage_team_chat_id or "").strip()
-        if highkage_chat and str(chat_id) == highkage_chat:
-            return "highkage_group"
-        return "sensei_group"
-
-    # Backward-compatible fallback by handle list.
+    # Primary rule: classify by username.
     normalized = (user_handle or "").strip().lower().lstrip("@")
-    if not normalized:
-        return None
-    sensei_handles = {
-        h.strip().lower().lstrip("@")
-        for h in bot_config.sensei_group_handles.split(",")
-        if h.strip()
-    }
     highkage_handles = {
         h.strip().lower().lstrip("@")
         for h in bot_config.highkage_group_handles.split(",")
         if h.strip()
     }
-    if normalized in sensei_handles:
-        return "sensei_group"
-    if normalized in highkage_handles:
+    if normalized and normalized in highkage_handles:
         return "highkage_group"
-    return None
+    return "sensei_group"
 
 
 async def _send_transactions_page_from_message(
