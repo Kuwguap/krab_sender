@@ -215,9 +215,7 @@ function renderTransactions(items) {
     tr.appendChild(tdClient);
 
     const tdTelegram = document.createElement("td");
-    tdTelegram.textContent = `${tx.telegram_name} ${
-      tx.telegram_handle ? "(@" + tx.telegram_handle + ")" : ""
-    }`;
+    tdTelegram.textContent = tx.telegram_name || "—";
     tr.appendChild(tdTelegram);
 
     const tdDriver = document.createElement("td");
@@ -285,9 +283,7 @@ async function refreshLatest() {
     el.innerHTML = `
       <div><strong>${data.filename}</strong></div>
       <div class="small">
-        ${data.telegram_name} ${
-      data.telegram_handle ? "(@" + data.telegram_handle + ")" : ""
-    } · ${formatNy(data.timestamp_ny)}
+        ${data.telegram_name || "—"} · ${formatNy(data.timestamp_ny)}
       </div>
       <div class="small">Driver: ${data.recipient_name || "Not recorded"}</div>
       <div class="small">Status: ${data.delivery_status}</div>
