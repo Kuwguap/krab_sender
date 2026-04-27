@@ -255,7 +255,13 @@
         background: radial-gradient(circle at top left, #020617, #020617 55%);
         max-height: 280px;
         -webkit-overflow-scrolling: touch;
-        touch-action: pan-x pan-y pinch-zoom;
+        touch-action: auto;
+      }
+
+      .summary-table-wrap {
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: auto;
       }
 
       table {
@@ -329,6 +335,10 @@
       @media (max-width: 640px) {
         .summary-metrics:not(.summary-metrics-issuer) {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .summary-table-wrap table {
+          min-width: 760px;
         }
       }
 
@@ -600,7 +610,7 @@
                   Click “Generate” to view the last 7 NJ days.
                 </div>
                 <div id="summary-table-wrapper" style="margin-top: 0.6rem;">
-                  <div class="table-wrap" id="summary-table" style="max-height: 220px;">
+                  <div class="table-wrap summary-table-wrap" id="summary-table" style="max-height: 220px;">
                     <table>
                       <thead>
                         <tr>
