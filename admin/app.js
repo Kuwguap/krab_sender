@@ -346,67 +346,42 @@ function renderSummaryTable(summary) {
     return;
   }
 
-  // Group by sender (name + handle), but render as a flat table sorted by sender.
-  const grouped = {};
-  for (const item of items) {
-    const key = `${item.telegram_name}||${item.telegram_handle || ""}`;
-    if (!grouped[key]) {
-      grouped[key] = [];
-    }
-    grouped[key].push(item);
-  }
+  const sorted = [...items].sort((a, b) => parseItemTimeMs(a) - parseItemTimeMs(b));
 
-  const senderKeys = Object.keys(grouped).sort();
+  for (let i = 0; i < sorted.length; i += 1) {
+    const it = sorted[i];
+    const tr = document.createElement("tr");
 
-  let rowNum = 1;
-  for (const key of senderKeys) {
-    const [name, handle] = key.split("||");
-    const senderItems = grouped[key];
+    const tdNum = document.createElement("td");
+    tdNum.textContent = String(i + 1);
+    tr.appendChild(tdNum);
 
-    // Optional: a small separator row per sender (visually lightweight)
-    const sep = document.createElement("tr");
-    const sepTd = document.createElement("td");
-    sepTd.colSpan = 7;
-    sepTd.className = "small";
-    sepTd.textContent = `${name} ${handle ? "(" + handle + ")" : ""} · ${
-      senderItems.length
-    } item(s)`;
-    sep.appendChild(sepTd);
-    tbody.appendChild(sep);
+    const tdTime = document.createElement("td");
+    tdTime.textContent = formatNy(it.timestamp_ny);
+    tr.appendChild(tdTime);
 
-    for (const it of senderItems) {
-      const tr = document.createElement("tr");
+    const tdIssuerName = document.createElement("td");
+    tdIssuerName.textContent = it.telegram_name || "—";
+    tr.appendChild(tdIssuerName);
 
-      const tdNum = document.createElement("td");
-      tdNum.textContent = String(rowNum++);
-      tr.appendChild(tdNum);
+    const tdDriverName = document.createElement("td");
+    tdDriverName.textContent = it.recipient_name || "—";
+    tr.appendChild(tdDriverName);
 
-      const tdSender = document.createElement("td");
-      tdSender.textContent = name;
-      tr.appendChild(tdSender);
+    const tdSuccess = document.createElement("td");
+    tdSuccess.textContent =
+      (it.delivery_status || "").toUpperCase() === "DELIVERED" ? "YES" : "NO";
+    tr.appendChild(tdSuccess);
 
-      const tdHandle = document.createElement("td");
-      tdHandle.textContent = handle || "—";
-      tr.appendChild(tdHandle);
+    const tdIssuerHandle = document.createElement("td");
+    tdIssuerHandle.textContent = formatHandleWithAt(it.telegram_handle) || "—";
+    tr.appendChild(tdIssuerHandle);
 
-      const tdDriver = document.createElement("td");
-      tdDriver.textContent = it.recipient_name || "—";
-      tr.appendChild(tdDriver);
+    const tdDriverEmail = document.createElement("td");
+    tdDriverEmail.textContent = it.recipient_email || "—";
+    tr.appendChild(tdDriverEmail);
 
-      const tdFile = document.createElement("td");
-      tdFile.textContent = it.filename;
-      tr.appendChild(tdFile);
-
-      const tdTime = document.createElement("td");
-      tdTime.textContent = formatNy(it.timestamp_ny);
-      tr.appendChild(tdTime);
-
-      const tdStatus = document.createElement("td");
-      tdStatus.textContent = (it.delivery_status || "").toUpperCase();
-      tr.appendChild(tdStatus);
-
-      tbody.appendChild(tr);
-    }
+    tbody.appendChild(tr);
   }
 }
 
@@ -419,13 +394,12 @@ function downloadSummaryCsv() {
   const rows = [
     [
       "Row",
-      "SenderName",
-      "SenderHandle",
-      "IssuerGroup",
+      "TimeDate",
+      "IssuerName",
       "DriverName",
-      "Filename",
-      "Time_NJ",
-      "Status",
+      "Success",
+      "IssuerUsername",
+      "DriverEmail",
     ],
   ];
 
@@ -433,13 +407,12 @@ function downloadSummaryCsv() {
     const it = lastSummary.items[i];
     rows.push([
       i + 1,
-      it.telegram_name || "",
-      formatHandleWithAt(it.telegram_handle),
-      issuerGroupFromHandle(it.telegram_handle),
-      it.recipient_name || "Not recorded",
-      it.filename || "",
       formatNy(it.timestamp_ny || ""),
-      (it.delivery_status || "").toUpperCase(),
+      it.telegram_name || "",
+      it.recipient_name || "Not recorded",
+      (it.delivery_status || "").toUpperCase() === "DELIVERED" ? "YES" : "NO",
+      formatHandleWithAt(it.telegram_handle),
+      it.recipient_email || "",
     ]);
   }
 
