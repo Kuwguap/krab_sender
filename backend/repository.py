@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+import os
 from typing import Iterable, List, Optional
 
 from sqlalchemy import func
@@ -12,6 +13,19 @@ from bot.models import Transaction
 
 
 NY_TZ = ZoneInfo("America/New_York")
+
+
+def _get_highkage_handle_set() -> set[str]:
+    raw = (os.getenv("HIGHKAGE_GROUP_HANDLES") or "").strip()
+    handles = {
+        h.strip().lower().lstrip("@")
+        for h in raw.split(",")
+        if h.strip()
+    }
+    # Stable default so highkage classification works if env is missing.
+    if not handles:
+        handles = {"haruhatsu"}
+    return handles
 
 
 @contextmanager
@@ -158,11 +172,24 @@ def get_rolling_summary_ny(
             "sensei_group": {"issued": 0, "sent": 0},
             "highkage_group": {"issued": 0, "sent": 0},
         }
-        ig = func.lower(func.coalesce(TransactionORM.issuer_group, ""))
-        for gkey in ("sensei_group", "highkage_group"):
-            gq = base.filter(ig == gkey)
-            group_counts[gkey]["issued"] = gq.count()
-            group_counts[gkey]["sent"] = gq.filter(status_u == "DELIVERED").count()
+        # Canonical issuer split: classify by sender telegram_handle.
+        # Historical issuer_group values can be stale/incorrect.
+        highkage_handles = _get_highkage_handle_set()
+        handle_norm = func.lower(
+            func.replace(func.coalesce(TransactionORM.telegram_handle, ""), "@", "")
+        )
+        if highkage_handles:
+            highkage_q = base.filter(handle_norm.in_(tuple(highkage_handles)))
+        else:
+            # Defensive fallback (helper currently always returns at least one handle).
+            highkage_q = base.filter(False)
+        highkage_issued = highkage_q.count()
+        highkage_sent = highkage_q.filter(status_u == "DELIVERED").count()
+
+        group_counts["highkage_group"]["issued"] = highkage_issued
+        group_counts["highkage_group"]["sent"] = highkage_sent
+        group_counts["sensei_group"]["issued"] = max(0, total - highkage_issued)
+        group_counts["sensei_group"]["sent"] = max(0, delivered - highkage_sent)
 
         # Most-recent N rows for the table (chronological within the cap).
         rows: List[TransactionORM] = (
