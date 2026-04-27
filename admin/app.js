@@ -378,7 +378,19 @@ function renderSummaryTable(summary) {
     tr.appendChild(tdSuccess);
 
     const tdStatus = document.createElement("td");
-    tdStatus.textContent = (it.delivery_status || "").toUpperCase() || "UNKNOWN";
+    tdStatus.className = "status";
+    const statusPill = document.createElement("span");
+    const status = (it.delivery_status || "").toUpperCase();
+    statusPill.classList.add("pill");
+    if (status === "DELIVERED") {
+      statusPill.classList.add("delivered");
+    } else if (status === "PENDING") {
+      statusPill.classList.add("pending");
+    } else {
+      statusPill.classList.add("failed");
+    }
+    statusPill.textContent = status || "UNKNOWN";
+    tdStatus.appendChild(statusPill);
     tr.appendChild(tdStatus);
 
     const tdIssuerHandle = document.createElement("td");
