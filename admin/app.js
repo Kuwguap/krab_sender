@@ -338,7 +338,7 @@ function renderSummaryTable(summary) {
   if (items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 8;
+    td.colSpan = 9;
     td.className = "muted";
     td.textContent = "No transmissions in this summary window.";
     tr.appendChild(td);
@@ -377,6 +377,10 @@ function renderSummaryTable(summary) {
       (it.delivery_status || "").toUpperCase() === "DELIVERED" ? "YES" : "NO";
     tr.appendChild(tdSuccess);
 
+    const tdStatus = document.createElement("td");
+    tdStatus.textContent = (it.delivery_status || "").toUpperCase() || "UNKNOWN";
+    tr.appendChild(tdStatus);
+
     const tdIssuerHandle = document.createElement("td");
     tdIssuerHandle.textContent = formatHandleWithAt(it.telegram_handle) || "—";
     tr.appendChild(tdIssuerHandle);
@@ -403,6 +407,7 @@ function downloadSummaryCsv() {
       "IssuerName",
       "DriverName",
       "Success",
+      "Status",
       "IssuerUsername",
       "DriverEmail",
     ],
@@ -417,6 +422,7 @@ function downloadSummaryCsv() {
       it.telegram_name || "",
       it.recipient_name || "Not recorded",
       (it.delivery_status || "").toUpperCase() === "DELIVERED" ? "YES" : "NO",
+      (it.delivery_status || "").toUpperCase() || "UNKNOWN",
       formatHandleWithAt(it.telegram_handle),
       it.recipient_email || "",
     ]);
@@ -717,6 +723,7 @@ function setupEvents() {
   const summaryDownloadBtn = document.getElementById(
     "summary-download-btn"
   );
+  const summaryExpandBtn = document.getElementById("summary-expand-btn");
 
   async function doLogin() {
     const pw = input.value.trim();
@@ -760,6 +767,17 @@ function setupEvents() {
   if (summaryDownloadBtn) {
     summaryDownloadBtn.addEventListener("click", () => {
       downloadSummaryCsv();
+    });
+  }
+
+  if (summaryExpandBtn) {
+    summaryExpandBtn.addEventListener("click", () => {
+      const wrapper = document.getElementById("summary-table-wrapper");
+      if (!wrapper) return;
+      const expanded = wrapper.classList.toggle("expanded");
+      summaryExpandBtn.innerHTML = expanded
+        ? "🗕<span>Collapse</span>"
+        : "⤢<span>Expand</span>";
     });
   }
 

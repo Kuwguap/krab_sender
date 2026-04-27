@@ -264,6 +264,26 @@
         touch-action: auto;
       }
 
+      .summary-table-wrapper {
+        position: relative;
+      }
+
+      .summary-table-wrapper.expanded {
+        position: fixed;
+        inset: 1rem;
+        z-index: 1200;
+        margin: 0 !important;
+        padding: 0.75rem;
+        border-radius: 0.9rem;
+        border: 1px solid var(--border-subtle);
+        background: rgba(2, 6, 23, 0.96);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+      }
+
+      .summary-table-wrapper.expanded .summary-table-wrap {
+        max-height: calc(100vh - 5.5rem) !important;
+      }
+
       table {
         width: 100%;
         min-width: 680px;
@@ -478,7 +498,7 @@
                     <th>#</th>
                     <th>Time (NJ)</th>
                     <th>Client / File</th>
-                    <th>Telegram</th>
+                    <th>Issuer</th>
                     <th>Driver</th>
                     <th>Status</th>
                   </tr>
@@ -560,6 +580,10 @@
                       ⬇
                       <span>Download CSV</span>
                     </button>
+                    <button id="summary-expand-btn" class="secondary" type="button">
+                      ⤢
+                      <span>Expand</span>
+                    </button>
                   </div>
                 </div>
                 <div id="summary-meta" class="small">
@@ -609,7 +633,11 @@
                 <div id="summary-status" class="small" style="margin-top: 0.4rem;">
                   Click “Generate” to view the last 7 NJ days.
                 </div>
-                <div id="summary-table-wrapper" style="margin-top: 0.6rem;">
+                <div
+                  id="summary-table-wrapper"
+                  class="summary-table-wrapper"
+                  style="margin-top: 0.6rem;"
+                >
                   <div class="table-wrap summary-table-wrap" id="summary-table" style="max-height: 220px;">
                     <table>
                       <thead>
@@ -620,13 +648,14 @@
                           <th>Issuer Name</th>
                           <th>Driver Name</th>
                           <th>Success</th>
+                          <th>Status</th>
                           <th>Issuer @Username</th>
                           <th>Driver Email</th>
                         </tr>
                       </thead>
                       <tbody id="summary-tbody">
                         <tr>
-                          <td colspan="8" class="muted">
+                          <td colspan="9" class="muted">
                             Generate a summary to see grouped results by sender.
                           </td>
                         </tr>
