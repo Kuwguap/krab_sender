@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <title>Krab Sender Admin</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes"
+    />
     <style>
       :root {
         color-scheme: dark;
@@ -251,6 +254,8 @@
         overflow: auto;
         background: radial-gradient(circle at top left, #020617, #020617 55%);
         max-height: 280px;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x pan-y pinch-zoom;
       }
 
       table {
@@ -556,7 +561,7 @@
                     <div id="summary-total" class="metric-value">0</div>
                   </div>
                   <div class="metric">
-                    <div class="metric-label">Revenue</div>
+                    <div class="metric-label">Estimated Revenue</div>
                     <div id="summary-revenue" class="metric-value">$0</div>
                   </div>
                   <div class="metric">
