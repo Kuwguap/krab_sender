@@ -338,7 +338,7 @@ function renderSummaryTable(summary) {
   if (items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7;
+    td.colSpan = 8;
     td.className = "muted";
     td.textContent = "No transmissions in this summary window.";
     tr.appendChild(td);
@@ -359,6 +359,10 @@ function renderSummaryTable(summary) {
     const tdTime = document.createElement("td");
     tdTime.textContent = formatNy(it.timestamp_ny);
     tr.appendChild(tdTime);
+
+    const tdPdf = document.createElement("td");
+    tdPdf.textContent = it.filename || "—";
+    tr.appendChild(tdPdf);
 
     const tdIssuerName = document.createElement("td");
     tdIssuerName.textContent = it.telegram_name || "—";
@@ -395,6 +399,7 @@ function downloadSummaryCsv() {
     [
       "Row",
       "TimeDate",
+      "ClientPdfName",
       "IssuerName",
       "DriverName",
       "Success",
@@ -408,6 +413,7 @@ function downloadSummaryCsv() {
     rows.push([
       i + 1,
       formatNy(it.timestamp_ny || ""),
+      it.filename || "",
       it.telegram_name || "",
       it.recipient_name || "Not recorded",
       (it.delivery_status || "").toUpperCase() === "DELIVERED" ? "YES" : "NO",
