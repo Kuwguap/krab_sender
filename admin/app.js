@@ -105,6 +105,20 @@ function formatRevenueUsd(totalCount) {
   }).format(n * 100);
 }
 
+function normalizeHandle(rawHandle) {
+  return String(rawHandle || "").trim().toLowerCase().replace(/^@/, "");
+}
+
+function formatHandleWithAt(rawHandle) {
+  const h = normalizeHandle(rawHandle);
+  return h ? "@" + h : "";
+}
+
+function issuerGroupFromHandle(rawHandle) {
+  const h = normalizeHandle(rawHandle);
+  return HIGHKAGE_FALLBACK_HANDLES.has(h) ? "highkage_group" : "sensei_group";
+}
+
 function getStoredPassword() {
   try {
     return localStorage.getItem("krab_admin_password") || "";
@@ -420,9 +434,9 @@ function downloadSummaryCsv() {
     rows.push([
       i + 1,
       it.telegram_name || "",
-      it.telegram_handle || "",
-      it.issuer_group || "",
-      it.recipient_name || "",
+      formatHandleWithAt(it.telegram_handle),
+      issuerGroupFromHandle(it.telegram_handle),
+      it.recipient_name || "Not recorded",
       it.filename || "",
       formatNy(it.timestamp_ny || ""),
       (it.delivery_status || "").toUpperCase(),
