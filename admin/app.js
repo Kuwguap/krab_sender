@@ -438,7 +438,7 @@ function renderSummaryIssuerTable(summary) {
   if (items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7;
+    td.colSpan = 5;
     td.className = "muted";
     td.textContent = "No issuer data in this summary window.";
     tr.appendChild(td);
@@ -477,10 +477,8 @@ function renderSummaryIssuerTable(summary) {
     const cells = [
       row.issuerName,
       row.issuerHandle,
-      String(row.total),
       String(row.delivered),
       String(row.pending),
-      String(row.failed),
       row.drivers.size > 0 ? Array.from(row.drivers).join(", ") : "—",
     ];
     for (const c of cells) {
