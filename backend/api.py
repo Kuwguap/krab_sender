@@ -251,6 +251,25 @@ class SummaryAiAskRequest(BaseModel):
     summary: dict
 
 
+def _fallback_summary_answer(question: str, items: list[dict]) -> str:
+    q = (question or "").strip().lower()
+    if not items:
+        return "There are no rows in the current summary window."
+
+    if "which issuer" in q and ("most" in q or "highest" in q):
+        counts: dict[str, int] = {}
+        for it in items:
+            issuer = str(it.get("telegram_name") or "Unknown").strip() or "Unknown"
+            counts[issuer] = counts.get(issuer, 0) + 1
+        top_issuer = max(counts, key=counts.get)
+        return f"{top_issuer} has the most transactions: {counts[top_issuer]}."
+
+    if "total" in q:
+        return f"Total transactions in this summary: {len(items)}."
+
+    return "I could not generate an answer from the current summary data."
+
+
 @app.get("/recipients/all", dependencies=[Depends(require_admin)])
 def recipients_all():
     """
@@ -367,14 +386,22 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
             for block in out:
                 for c in block.get("content") or []:
                     txt = c.get("text")
-                    if txt:
-                        parts.append(txt)
+                    if isinstance(txt, str) and txt.strip():
+                        parts.append(txt.strip())
+                    elif isinstance(txt, dict):
+                        val = txt.get("value") or txt.get("text")
+                        if isinstance(val, str) and val.strip():
+                            parts.append(val.strip())
+                    elif c.get("type") == "output_text":
+                        val = c.get("value") or c.get("text")
+                        if isinstance(val, str) and val.strip():
+                            parts.append(val.strip())
             answer = "\n".join(parts).strip()
         except Exception:
             answer = ""
 
     if not answer:
-        answer = "I could not generate an answer from the current summary data."
+        answer = _fallback_summary_answer(question, compact_items)
     return {"answer": answer}
 
 

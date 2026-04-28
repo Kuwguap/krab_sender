@@ -331,7 +331,7 @@ let lastSummary = null;
 let summaryZoomScale = 1;
 
 function clampSummaryZoom(next) {
-  return Math.max(0.25, Math.min(2.5, next));
+  return Math.max(0.35, Math.min(2.5, next));
 }
 
 function applySummaryZoom(scale) {
@@ -535,6 +535,23 @@ function answerSummaryQuestion(question) {
 
   if (q.includes("total")) {
     return `Total transactions in this summary: ${items.length}.`;
+  }
+
+  if (q.includes("which issuer") && (q.includes("most") || q.includes("highest"))) {
+    const counts = {};
+    for (const it of items) {
+      const issuer = (it.telegram_name || "Unknown").trim();
+      counts[issuer] = (counts[issuer] || 0) + 1;
+    }
+    let topIssuer = "Unknown";
+    let topCount = 0;
+    for (const [issuer, n] of Object.entries(counts)) {
+      if (n > topCount) {
+        topIssuer = issuer;
+        topCount = n;
+      }
+    }
+    return `${topIssuer} has the most transactions: ${topCount}.`;
   }
 
   return "I can answer questions like: 'how many issuers made transactions today?' or 'how many does haru have?'";
