@@ -264,6 +264,44 @@
         touch-action: auto;
       }
 
+      .tx-table-wrap {
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: auto;
+      }
+
+      .tx-table-wrapper {
+        position: relative;
+      }
+
+      .tx-table-wrapper.expanded {
+        position: fixed;
+        inset: 1rem;
+        z-index: 1190;
+        margin: 0 !important;
+        padding: 0.75rem;
+        border-radius: 0.9rem;
+        border: 1px solid var(--border-subtle);
+        background: rgba(2, 6, 23, 0.96);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+      }
+
+      .tx-table-wrapper.expanded .tx-table-wrap {
+        max-height: calc(100vh - 5.5rem) !important;
+      }
+
+      .tx-expanded-controls {
+        display: none;
+      }
+
+      .tx-table-wrapper.expanded .tx-expanded-controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.35rem;
+        margin-bottom: 0.5rem;
+        flex-wrap: wrap;
+      }
+
       .summary-table-wrapper {
         position: relative;
       }
@@ -302,7 +340,18 @@
         align-items: center;
       }
 
+      .tx-zoom-controls {
+        display: inline-flex;
+        gap: 0.35rem;
+        align-items: center;
+      }
+
       .summary-zoom-controls .secondary {
+        padding: 0.25rem 0.6rem;
+        font-size: 0.74rem;
+      }
+
+      .tx-zoom-controls .secondary {
         padding: 0.25rem 0.6rem;
         font-size: 0.74rem;
       }
@@ -541,6 +590,13 @@
                   rel="noopener noreferrer"
                   >🤖https://t.me/krabsenderbot</a>
               </div>
+              <div>
+                <a
+                  href="https://krabsender.vercel.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >🌐https://krabsender.vercel.app</a>
+              </div>
               <p class="header-brand-tagline">
                 📊Monitor Weekly Performance📈
               </p>
@@ -557,31 +613,50 @@
           <section class="panel">
             <div class="panel-header">
               <div class="panel-title">Transmissions</div>
-              <button id="refresh-table-btn">
-                ⟳
-                <span>Refresh</span>
-              </button>
+              <div style="display:flex;align-items:center;gap:0.35rem;flex-wrap:wrap;justify-content:flex-end">
+                <button id="refresh-table-btn">
+                  ⟳
+                  <span>Refresh</span>
+                </button>
+                <button id="tx-expand-btn" class="secondary" type="button">
+                  ⤢
+                  <span>Expand</span>
+                </button>
+                <span class="tx-zoom-controls">
+                  <button id="tx-zoom-out-btn" class="secondary" type="button">－</button>
+                  <button id="tx-zoom-reset-btn" class="secondary" type="button">100%</button>
+                  <button id="tx-zoom-in-btn" class="secondary" type="button">＋</button>
+                </span>
+              </div>
             </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Time (NJ)</th>
-                    <th>Client / File</th>
-                    <th>Issuer</th>
-                    <th>Driver</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="tx-body">
-                  <tr>
-                    <td colspan="6" class="muted">
-                      Waiting for data... send a document through the bot.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div id="tx-table-wrapper" class="tx-table-wrapper">
+              <div class="tx-expanded-controls">
+                <button id="tx-expanded-zoom-out-btn" class="secondary" type="button">－</button>
+                <button id="tx-expanded-zoom-reset-btn" class="secondary" type="button">100%</button>
+                <button id="tx-expanded-zoom-in-btn" class="secondary" type="button">＋</button>
+                <button id="tx-expanded-close-btn" class="secondary" type="button">Close</button>
+              </div>
+              <div class="table-wrap tx-table-wrap" id="tx-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Time (NJ)</th>
+                      <th>Client / File</th>
+                      <th>Issuer</th>
+                      <th>Driver</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tx-body">
+                    <tr>
+                      <td colspan="6" class="muted">
+                        Waiting for data... send a document through the bot.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
 

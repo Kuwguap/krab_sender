@@ -290,6 +290,19 @@ def _extract_openai_answer(data: dict) -> str:
     return "\n".join(parts).strip()
 
 
+def _openai_model_candidates() -> list[str]:
+    """
+    Ordered model fallback list.
+    Set OPENAI_MODELS as comma-separated list to override.
+    """
+    raw = (os.getenv("OPENAI_MODELS") or "").strip()
+    if raw:
+        models = [m.strip() for m in raw.split(",") if m.strip()]
+        if models:
+            return models
+    return ["gpt-5", "gpt-4.1-mini", "gpt-4o-mini"]
+
+
 @app.get("/recipients/all", dependencies=[Depends(require_admin)])
 def recipients_all():
     """
@@ -397,37 +410,47 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
         f"Summary JSON: {compact_summary}"
     )
 
-    try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            res = await client.post(
-                "https://api.openai.com/v1/responses",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "gpt-5",
-                    "input": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "max_output_tokens": 220,
-                },
-            )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI request failed: {e}")
+    errors: list[str] = []
+    models = _openai_model_candidates()
 
-    if res.status_code >= 400:
-        raise HTTPException(
-            status_code=502,
-            detail=f"OpenAI API error: HTTP {res.status_code}",
-        )
+    async def _ask_once(model: str, user_content: str) -> tuple[str, str]:
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.post(
+                    "https://api.openai.com/v1/responses",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "input": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content},
+                        ],
+                        "max_output_tokens": 220,
+                    },
+                )
+        except Exception as e:
+            return "", f"{model}: request failed ({e})"
+        if res.status_code >= 400:
+            return "", f"{model}: HTTP {res.status_code}"
+        try:
+            data = res.json()
+        except Exception as e:
+            return "", f"{model}: invalid JSON ({e})"
+        answer_text = _extract_openai_answer(data)
+        if not answer_text:
+            return "", f"{model}: empty answer"
+        return answer_text, ""
 
-    try:
-        data = res.json()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI invalid JSON: {e}")
-    answer = _extract_openai_answer(data)
+    answer = ""
+    for model in models:
+        answer, err = await _ask_once(model, user_prompt)
+        if answer:
+            break
+        if err:
+            errors.append(err)
 
     if not answer:
         retry_user_prompt = (
@@ -437,37 +460,19 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
             f"Question: {question}\n\n"
             f"Summary JSON: {compact_summary}"
         )
-        try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                retry = await client.post(
-                    "https://api.openai.com/v1/responses",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": "gpt-5",
-                        "input": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": retry_user_prompt},
-                        ],
-                        "max_output_tokens": 220,
-                    },
-                )
-            if retry.status_code >= 400:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"OpenAI retry API error: HTTP {retry.status_code}",
-                )
-            retry_data = retry.json()
-            answer = _extract_openai_answer(retry_data)
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"OpenAI retry failed: {e}")
+        for model in models:
+            answer, err = await _ask_once(model, retry_user_prompt)
+            if answer:
+                break
+            if err:
+                errors.append(err)
 
     if not answer:
-        raise HTTPException(status_code=502, detail="OpenAI returned empty answer")
+        # Keep response shape stable for frontend chat UI while reporting backend issue.
+        return {
+            "answer": "AI is temporarily unavailable. Please try again in a moment.",
+            "error": " ; ".join(errors[:6]),
+        }
     return {"answer": answer}
 
 

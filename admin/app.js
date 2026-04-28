@@ -329,6 +329,7 @@ async function refreshLatest() {
 
 let lastSummary = null;
 let summaryZoomScale = 1;
+let txZoomScale = 1;
 const summaryAiHistory = [];
 const SUMMARY_AI_HISTORY_KEY = "krab_summary_ai_history";
 
@@ -402,6 +403,26 @@ function applySummaryZoom(scale) {
   const resetBtnExpanded = document.getElementById("summary-expanded-zoom-reset-btn");
   if (resetBtnExpanded) {
     resetBtnExpanded.textContent = `${Math.round(summaryZoomScale * 100)}%`;
+  }
+}
+
+function clampTxZoom(next) {
+  return Math.max(0.05, Math.min(2.5, next));
+}
+
+function applyTxZoom(scale) {
+  txZoomScale = clampTxZoom(scale);
+  const table = document.querySelector("#tx-table table");
+  if (table) {
+    table.style.zoom = String(txZoomScale);
+  }
+  const resetBtn = document.getElementById("tx-zoom-reset-btn");
+  if (resetBtn) {
+    resetBtn.textContent = `${Math.round(txZoomScale * 100)}%`;
+  }
+  const resetBtnExpanded = document.getElementById("tx-expanded-zoom-reset-btn");
+  if (resetBtnExpanded) {
+    resetBtnExpanded.textContent = `${Math.round(txZoomScale * 100)}%`;
   }
 }
 
@@ -1017,6 +1038,14 @@ function setupEvents() {
   const summaryExpandedCloseBtn = document.getElementById(
     "summary-expanded-close-btn"
   );
+  const txExpandBtn = document.getElementById("tx-expand-btn");
+  const txZoomInBtn = document.getElementById("tx-zoom-in-btn");
+  const txZoomOutBtn = document.getElementById("tx-zoom-out-btn");
+  const txZoomResetBtn = document.getElementById("tx-zoom-reset-btn");
+  const txExpandedZoomInBtn = document.getElementById("tx-expanded-zoom-in-btn");
+  const txExpandedZoomOutBtn = document.getElementById("tx-expanded-zoom-out-btn");
+  const txExpandedZoomResetBtn = document.getElementById("tx-expanded-zoom-reset-btn");
+  const txExpandedCloseBtn = document.getElementById("tx-expanded-close-btn");
   const summaryAiInput = document.getElementById("summary-ai-input");
   const summaryAiAskBtn = document.getElementById("summary-ai-ask-btn");
   const summaryAiAnswer = document.getElementById("summary-ai-answer");
@@ -1090,6 +1119,26 @@ function setupEvents() {
     });
   }
 
+  if (txExpandBtn) {
+    txExpandBtn.addEventListener("click", () => {
+      const wrapper = document.getElementById("tx-table-wrapper");
+      if (!wrapper) return;
+      const expanded = wrapper.classList.toggle("expanded");
+      txExpandBtn.innerHTML = expanded ? "🗕<span>Collapse</span>" : "⤢<span>Expand</span>";
+    });
+  }
+
+  if (txExpandedCloseBtn) {
+    txExpandedCloseBtn.addEventListener("click", () => {
+      const wrapper = document.getElementById("tx-table-wrapper");
+      if (!wrapper) return;
+      wrapper.classList.remove("expanded");
+      if (txExpandBtn) {
+        txExpandBtn.innerHTML = "⤢<span>Expand</span>";
+      }
+    });
+  }
+
   if (summaryZoomInBtn) {
     summaryZoomInBtn.addEventListener("click", () => {
       applySummaryZoom(summaryZoomScale + 0.1);
@@ -1121,6 +1170,37 @@ function setupEvents() {
     });
   }
 
+  if (txZoomInBtn) {
+    txZoomInBtn.addEventListener("click", () => {
+      applyTxZoom(txZoomScale + 0.1);
+    });
+  }
+  if (txZoomOutBtn) {
+    txZoomOutBtn.addEventListener("click", () => {
+      applyTxZoom(txZoomScale - 0.1);
+    });
+  }
+  if (txZoomResetBtn) {
+    txZoomResetBtn.addEventListener("click", () => {
+      applyTxZoom(1);
+    });
+  }
+  if (txExpandedZoomInBtn) {
+    txExpandedZoomInBtn.addEventListener("click", () => {
+      applyTxZoom(txZoomScale + 0.1);
+    });
+  }
+  if (txExpandedZoomOutBtn) {
+    txExpandedZoomOutBtn.addEventListener("click", () => {
+      applyTxZoom(txZoomScale - 0.1);
+    });
+  }
+  if (txExpandedZoomResetBtn) {
+    txExpandedZoomResetBtn.addEventListener("click", () => {
+      applyTxZoom(1);
+    });
+  }
+
   const summaryTableWrap = document.querySelector("#summary-table");
   if (summaryTableWrap) {
     let pinchStartDistance = 0;
@@ -1146,6 +1226,38 @@ function setupEvents() {
           const distance = Math.hypot(dx, dy);
           const ratio = distance / pinchStartDistance;
           applySummaryZoom(pinchStartScale * ratio);
+          ev.preventDefault();
+        }
+      },
+      { passive: false }
+    );
+  }
+
+  const txTableWrap = document.querySelector("#tx-table");
+  if (txTableWrap) {
+    let pinchStartDistance = 0;
+    let pinchStartScale = 1;
+    txTableWrap.addEventListener(
+      "touchstart",
+      (ev) => {
+        if (ev.touches.length === 2) {
+          const dx = ev.touches[0].clientX - ev.touches[1].clientX;
+          const dy = ev.touches[0].clientY - ev.touches[1].clientY;
+          pinchStartDistance = Math.hypot(dx, dy);
+          pinchStartScale = txZoomScale;
+        }
+      },
+      { passive: true }
+    );
+    txTableWrap.addEventListener(
+      "touchmove",
+      (ev) => {
+        if (ev.touches.length === 2 && pinchStartDistance > 0) {
+          const dx = ev.touches[0].clientX - ev.touches[1].clientX;
+          const dy = ev.touches[0].clientY - ev.touches[1].clientY;
+          const distance = Math.hypot(dx, dy);
+          const ratio = distance / pinchStartDistance;
+          applyTxZoom(pinchStartScale * ratio);
           ev.preventDefault();
         }
       },
@@ -1216,11 +1328,27 @@ function setupEvents() {
       renderRecipients(recipients);
     } catch (e) {
       console.error("Failed to fetch recipients:", e);
-      recipientsBody.innerHTML = `
-        <tr>
-          <td colspan="3" class="muted">Failed to load recipients.</td>
-        </tr>
-      `;
+      // Fallback path: public recipients endpoint still lets dashboard show names.
+      try {
+        const res = await fetch(API_BASE + "/recipients");
+        if (!res.ok) {
+          throw new Error("HTTP_" + res.status);
+        }
+        const publicRecipients = await res.json();
+        const normalized = (publicRecipients || []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          email: "Unavailable (admin API issue)",
+        }));
+        renderRecipients(normalized);
+      } catch (e2) {
+        console.error("Fallback recipients fetch failed:", e2);
+        recipientsBody.innerHTML = `
+          <tr>
+            <td colspan="3" class="muted">Failed to load recipients.</td>
+          </tr>
+        `;
+      }
     }
   }
 
@@ -1343,6 +1471,7 @@ function setupEvents() {
   };
 
   applySummaryZoom(1);
+  applyTxZoom(1);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
