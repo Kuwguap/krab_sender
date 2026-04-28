@@ -270,6 +270,9 @@ def _fallback_summary_answer(question: str, items: list[dict]) -> str:
     if "total" in q:
         return f"Total transactions in this summary: {len(items)}."
 
+    if "how are you" in q or "how r u" in q:
+        return "I'm doing great and ready to help with your dashboard data. 🙂"
+
     return "I could not generate an answer from the current summary data."
 
 
@@ -409,6 +412,10 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
 
     if not answer:
         answer = _fallback_summary_answer(question, items)
+    else:
+        lowered = answer.lower()
+        if "insufficient data" in lowered or "not enough data" in lowered:
+            answer = _fallback_summary_answer(question, items)
     return {"answer": answer}
 
 
