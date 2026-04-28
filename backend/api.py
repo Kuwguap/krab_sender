@@ -250,6 +250,7 @@ class SummaryAiAskRequest(BaseModel):
     question: str
     summary: dict
     window: str | None = None
+    history: list[dict] | None = None
 
 
 def _fallback_summary_answer(question: str, items: list[dict]) -> str:
@@ -269,9 +270,6 @@ def _fallback_summary_answer(question: str, items: list[dict]) -> str:
 
     if "total" in q:
         return f"Total transactions in this summary: {len(items)}."
-
-    if "how are you" in q or "how r u" in q:
-        return "I'm doing great and ready to help with your dashboard data. 🙂"
 
     return "I could not generate an answer from the current summary data."
 
@@ -355,10 +353,22 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
         "items": compact_items,
     }
 
+    history = payload.history or []
+    compact_history = []
+    for h in history[-12:]:
+        role = str(h.get("role") or "").strip().lower()
+        content = str(h.get("content") or "").strip()
+        if role in {"user", "assistant"} and content:
+            compact_history.append({"role": role, "content": content[:1000]})
+
     prompt = (
-        "You are a data assistant for a logistics dashboard. "
-        "Answer ONLY from the provided JSON summary data. "
-        "If data is insufficient, say so briefly.\n\n"
+        "You are a friendly analytics copilot for a logistics dashboard.\n"
+        "Use ONLY the provided summary JSON data for factual claims.\n"
+        "Give the best possible answer from available data, including calculated totals, rankings, and comparisons.\n"
+        "If some requested detail is missing, say what is available and offer the closest useful answer.\n"
+        "Never reply with the exact phrase: 'Insufficient data to answer from the provided summary.'\n"
+        "Keep responses concise and practical.\n\n"
+        f"Conversation history: {compact_history}\n\n"
         f"Question: {question}\n\n"
         f"Summary JSON: {compact_summary}"
     )
@@ -411,11 +421,33 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
             answer = ""
 
     if not answer:
+        retry_prompt = (
+            "Provide a best-effort answer from this summary data. "
+            "If exact value is unavailable, return the nearest useful metric and why.\n\n"
+            f"Question: {question}\n\nSummary JSON: {compact_summary}"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                retry = await client.post(
+                    "https://api.openai.com/v1/responses",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "gpt-5",
+                        "input": retry_prompt,
+                        "max_output_tokens": 220,
+                    },
+                )
+            if retry.status_code < 400:
+                retry_data = retry.json()
+                answer = (retry_data.get("output_text") or "").strip()
+        except Exception:
+            answer = ""
+
+    if not answer:
         answer = _fallback_summary_answer(question, items)
-    else:
-        lowered = answer.lower()
-        if "insufficient data" in lowered or "not enough data" in lowered:
-            answer = _fallback_summary_answer(question, items)
     return {"answer": answer}
 
 

@@ -329,6 +329,7 @@ async function refreshLatest() {
 
 let lastSummary = null;
 let summaryZoomScale = 1;
+const summaryAiHistory = [];
 
 function clampSummaryZoom(next) {
   return Math.max(0.35, Math.min(2.5, next));
@@ -570,6 +571,7 @@ async function askSummaryWithGpt(question) {
   }
   const payload = {
     question: q,
+    history: summaryAiHistory.slice(-12),
     window:
       (document.getElementById("summary-window") &&
         document.getElementById("summary-window").value) ||
@@ -1079,17 +1081,20 @@ function setupEvents() {
   async function handleAiAsk() {
     if (!summaryAiAnswer) return;
     const q = summaryAiInput ? summaryAiInput.value : "";
+    if (!String(q || "").trim()) {
+      summaryAiAnswer.textContent = "Please enter a question.";
+      return;
+    }
     summaryAiAnswer.textContent = "Thinking...";
+    summaryAiHistory.push({ role: "user", content: String(q) });
     try {
-      // Use GPT answer first; keep deterministic local fallback for resiliency.
       const ai = await askSummaryWithGpt(q);
-      if (ai && !String(ai).startsWith("AI unavailable")) {
-        summaryAiAnswer.textContent = ai;
-        return;
-      }
-      summaryAiAnswer.textContent = answerSummaryQuestion(q);
+      summaryAiAnswer.textContent = ai;
+      summaryAiHistory.push({ role: "assistant", content: String(ai) });
     } catch {
-      summaryAiAnswer.textContent = answerSummaryQuestion(q);
+      const msg = "AI unavailable right now. Please try again.";
+      summaryAiAnswer.textContent = msg;
+      summaryAiHistory.push({ role: "assistant", content: msg });
     }
   }
   if (summaryAiAskBtn) {
