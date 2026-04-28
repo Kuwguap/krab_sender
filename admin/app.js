@@ -537,7 +537,10 @@ function answerSummaryQuestion(question) {
     return `Total transactions in this summary: ${items.length}.`;
   }
 
-  if (q.includes("which issuer") && (q.includes("most") || q.includes("highest"))) {
+  if (
+    (q.includes("which issuer") || q.includes("who")) &&
+    (q.includes("most") || q.includes("highest") || q.includes("top"))
+  ) {
     const counts = {};
     for (const it of items) {
       const issuer = (it.telegram_name || "Unknown").trim();

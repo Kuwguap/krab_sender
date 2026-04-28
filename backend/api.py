@@ -257,7 +257,9 @@ def _fallback_summary_answer(question: str, items: list[dict]) -> str:
     if not items:
         return "There are no rows in the current summary window."
 
-    if "which issuer" in q and ("most" in q or "highest" in q):
+    if ("which issuer" in q or "who" in q) and (
+        "most" in q or "highest" in q or "top" in q
+    ):
         counts: dict[str, int] = {}
         for it in items:
             issuer = str(it.get("telegram_name") or "Unknown").strip() or "Unknown"
