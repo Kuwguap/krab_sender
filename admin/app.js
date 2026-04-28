@@ -345,6 +345,10 @@ function applySummaryZoom(scale) {
   if (resetBtn) {
     resetBtn.textContent = `${Math.round(summaryZoomScale * 100)}%`;
   }
+  const resetBtnExpanded = document.getElementById("summary-expanded-zoom-reset-btn");
+  if (resetBtnExpanded) {
+    resetBtnExpanded.textContent = `${Math.round(summaryZoomScale * 100)}%`;
+  }
 }
 
 function renderSummaryTable(summary) {
@@ -902,6 +906,18 @@ function setupEvents() {
   const summaryZoomInBtn = document.getElementById("summary-zoom-in-btn");
   const summaryZoomOutBtn = document.getElementById("summary-zoom-out-btn");
   const summaryZoomResetBtn = document.getElementById("summary-zoom-reset-btn");
+  const summaryExpandedZoomInBtn = document.getElementById(
+    "summary-expanded-zoom-in-btn"
+  );
+  const summaryExpandedZoomOutBtn = document.getElementById(
+    "summary-expanded-zoom-out-btn"
+  );
+  const summaryExpandedZoomResetBtn = document.getElementById(
+    "summary-expanded-zoom-reset-btn"
+  );
+  const summaryExpandedCloseBtn = document.getElementById(
+    "summary-expanded-close-btn"
+  );
   const summaryAiInput = document.getElementById("summary-ai-input");
   const summaryAiAskBtn = document.getElementById("summary-ai-ask-btn");
   const summaryAiAnswer = document.getElementById("summary-ai-answer");
@@ -962,6 +978,17 @@ function setupEvents() {
     });
   }
 
+  if (summaryExpandedCloseBtn) {
+    summaryExpandedCloseBtn.addEventListener("click", () => {
+      const wrapper = document.getElementById("summary-table-wrapper");
+      if (!wrapper) return;
+      wrapper.classList.remove("expanded");
+      if (summaryExpandBtn) {
+        summaryExpandBtn.innerHTML = "⤢<span>Expand</span>";
+      }
+    });
+  }
+
   if (summaryZoomInBtn) {
     summaryZoomInBtn.addEventListener("click", () => {
       applySummaryZoom(summaryZoomScale + 0.1);
@@ -974,6 +1001,21 @@ function setupEvents() {
   }
   if (summaryZoomResetBtn) {
     summaryZoomResetBtn.addEventListener("click", () => {
+      applySummaryZoom(1);
+    });
+  }
+  if (summaryExpandedZoomInBtn) {
+    summaryExpandedZoomInBtn.addEventListener("click", () => {
+      applySummaryZoom(summaryZoomScale + 0.1);
+    });
+  }
+  if (summaryExpandedZoomOutBtn) {
+    summaryExpandedZoomOutBtn.addEventListener("click", () => {
+      applySummaryZoom(summaryZoomScale - 0.1);
+    });
+  }
+  if (summaryExpandedZoomResetBtn) {
+    summaryExpandedZoomResetBtn.addEventListener("click", () => {
       applySummaryZoom(1);
     });
   }

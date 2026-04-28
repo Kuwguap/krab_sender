@@ -284,6 +284,18 @@
         max-height: calc(100vh - 5.5rem) !important;
       }
 
+      .expanded-controls {
+        display: none;
+      }
+
+      .summary-table-wrapper.expanded .expanded-controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.35rem;
+        margin-bottom: 0.5rem;
+        flex-wrap: wrap;
+      }
+
       .summary-zoom-controls {
         display: inline-flex;
         gap: 0.35rem;
@@ -676,6 +688,12 @@
                   class="summary-table-wrapper"
                   style="margin-top: 0.6rem;"
                 >
+                  <div class="expanded-controls">
+                    <button id="summary-expanded-zoom-out-btn" class="secondary" type="button">－</button>
+                    <button id="summary-expanded-zoom-reset-btn" class="secondary" type="button">100%</button>
+                    <button id="summary-expanded-zoom-in-btn" class="secondary" type="button">＋</button>
+                    <button id="summary-expanded-close-btn" class="secondary" type="button">Close</button>
+                  </div>
                   <div class="table-wrap summary-table-wrap" id="summary-table" style="max-height: 220px;">
                     <table>
                       <thead>
