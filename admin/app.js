@@ -226,7 +226,8 @@ function renderTransactions(items) {
     return;
   }
 
-  items.forEach((tx, index) => {
+  const sortedItems = [...items].sort((a, b) => parseItemTimeMs(b) - parseItemTimeMs(a));
+  sortedItems.forEach((tx, index) => {
     const tr = document.createElement("tr");
 
     const tdNum = document.createElement("td");
@@ -346,7 +347,7 @@ function renderSummaryTable(summary) {
     return;
   }
 
-  const sorted = [...items].sort((a, b) => parseItemTimeMs(a) - parseItemTimeMs(b));
+  const sorted = [...items].sort((a, b) => parseItemTimeMs(b) - parseItemTimeMs(a));
 
   for (let i = 0; i < sorted.length; i += 1) {
     const it = sorted[i];
