@@ -328,6 +328,24 @@ async function refreshLatest() {
 }
 
 let lastSummary = null;
+let summaryZoomScale = 1;
+
+function clampSummaryZoom(next) {
+  return Math.max(0.7, Math.min(2.5, next));
+}
+
+function applySummaryZoom(scale) {
+  summaryZoomScale = clampSummaryZoom(scale);
+  const table = document.querySelector("#summary-table table");
+  if (table) {
+    // `zoom` gives practical pinch-like resizing in Chromium-based browsers.
+    table.style.zoom = String(summaryZoomScale);
+  }
+  const resetBtn = document.getElementById("summary-zoom-reset-btn");
+  if (resetBtn) {
+    resetBtn.textContent = `${Math.round(summaryZoomScale * 100)}%`;
+  }
+}
 
 function renderSummaryTable(summary) {
   const tbody = document.getElementById("summary-tbody");
@@ -404,6 +422,118 @@ function renderSummaryTable(summary) {
 
     tbody.appendChild(tr);
   }
+}
+
+function renderSummaryIssuerTable(summary) {
+  const tbody = document.getElementById("summary-issuer-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const items = (summary && summary.items) || [];
+  if (items.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.className = "muted";
+    td.textContent = "No issuer data in this summary window.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  const grouped = {};
+  for (const it of items) {
+    const issuerName = it.telegram_name || "Unknown";
+    const issuerHandle = formatHandleWithAt(it.telegram_handle) || "—";
+    const key = `${issuerName}||${issuerHandle}`;
+    if (!grouped[key]) {
+      grouped[key] = {
+        issuerName,
+        issuerHandle,
+        total: 0,
+        delivered: 0,
+        pending: 0,
+        failed: 0,
+        drivers: new Set(),
+      };
+    }
+    const g = grouped[key];
+    g.total += 1;
+    const status = (it.delivery_status || "").toUpperCase();
+    if (status === "DELIVERED") g.delivered += 1;
+    else if (status === "PENDING") g.pending += 1;
+    else g.failed += 1;
+    if (it.recipient_name) g.drivers.add(it.recipient_name);
+  }
+
+  const rows = Object.values(grouped).sort((a, b) => b.total - a.total);
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const cells = [
+      row.issuerName,
+      row.issuerHandle,
+      String(row.total),
+      String(row.delivered),
+      String(row.pending),
+      String(row.failed),
+      row.drivers.size > 0 ? Array.from(row.drivers).join(", ") : "—",
+    ];
+    for (const c of cells) {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+function getNyDateKey(ts) {
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  } catch {
+    return "";
+  }
+}
+
+function answerSummaryQuestion(question) {
+  const q = String(question || "").trim().toLowerCase();
+  if (!q) return "Please ask a question.";
+  if (!lastSummary || !Array.isArray(lastSummary.items)) {
+    return "Generate summary first so I can analyze the data.";
+  }
+  const items = lastSummary.items;
+  if (!items.length) return "There are no rows in the current summary window.";
+
+  // Forward-step validation: only answer from loaded rows and clear patterns.
+  if (q.includes("how many issuers") && q.includes("today")) {
+    const todayNy = getNyDateKey(new Date().toISOString());
+    const issuerSet = new Set();
+    for (const it of items) {
+      if (getNyDateKey(it.timestamp_ny) === todayNy) {
+        issuerSet.add((it.telegram_name || "").trim().toLowerCase());
+      }
+    }
+    return `${issuerSet.size} issuer(s) made transactions today (NJ time).`;
+  }
+
+  const m = q.match(/how many(?:\s+does)?\s+(@?[a-z0-9_ ]+?)\s+(?:have|made|did)/i);
+  if (m && m[1]) {
+    const targetRaw = m[1].trim().toLowerCase().replace(/^@/, "");
+    let count = 0;
+    for (const it of items) {
+      const name = (it.telegram_name || "").trim().toLowerCase();
+      const handle = normalizeHandle(it.telegram_handle);
+      if (name === targetRaw || handle === targetRaw) count += 1;
+    }
+    return `${targetRaw} has ${count} transaction(s) in the current summary window.`;
+  }
+
+  if (q.includes("total")) {
+    return `Total transactions in this summary: ${items.length}.`;
+  }
+
+  return "I can answer questions like: 'how many issuers made transactions today?' or 'how many does haru have?'";
 }
 
 function downloadSummaryCsv() {
@@ -686,6 +816,7 @@ async function refreshSummary() {
     }
 
     renderSummaryTable(data);
+    renderSummaryIssuerTable(data);
   } catch (e) {
     console.error(e);
     const revenueOnErr = document.getElementById("summary-revenue");
@@ -737,6 +868,12 @@ function setupEvents() {
     "summary-download-btn"
   );
   const summaryExpandBtn = document.getElementById("summary-expand-btn");
+  const summaryZoomInBtn = document.getElementById("summary-zoom-in-btn");
+  const summaryZoomOutBtn = document.getElementById("summary-zoom-out-btn");
+  const summaryZoomResetBtn = document.getElementById("summary-zoom-reset-btn");
+  const summaryAiInput = document.getElementById("summary-ai-input");
+  const summaryAiAskBtn = document.getElementById("summary-ai-ask-btn");
+  const summaryAiAnswer = document.getElementById("summary-ai-answer");
 
   async function doLogin() {
     const pw = input.value.trim();
@@ -780,6 +917,81 @@ function setupEvents() {
   if (summaryDownloadBtn) {
     summaryDownloadBtn.addEventListener("click", () => {
       downloadSummaryCsv();
+    });
+  }
+
+  if (summaryExpandBtn) {
+    summaryExpandBtn.addEventListener("click", () => {
+      const wrapper = document.getElementById("summary-table-wrapper");
+      if (!wrapper) return;
+      const expanded = wrapper.classList.toggle("expanded");
+      summaryExpandBtn.innerHTML = expanded
+        ? "🗕<span>Collapse</span>"
+        : "⤢<span>Expand</span>";
+    });
+  }
+
+  if (summaryZoomInBtn) {
+    summaryZoomInBtn.addEventListener("click", () => {
+      applySummaryZoom(summaryZoomScale + 0.1);
+    });
+  }
+  if (summaryZoomOutBtn) {
+    summaryZoomOutBtn.addEventListener("click", () => {
+      applySummaryZoom(summaryZoomScale - 0.1);
+    });
+  }
+  if (summaryZoomResetBtn) {
+    summaryZoomResetBtn.addEventListener("click", () => {
+      applySummaryZoom(1);
+    });
+  }
+
+  const summaryTableWrap = document.querySelector("#summary-table");
+  if (summaryTableWrap) {
+    let pinchStartDistance = 0;
+    let pinchStartScale = 1;
+    summaryTableWrap.addEventListener(
+      "touchstart",
+      (ev) => {
+        if (ev.touches.length === 2) {
+          const dx = ev.touches[0].clientX - ev.touches[1].clientX;
+          const dy = ev.touches[0].clientY - ev.touches[1].clientY;
+          pinchStartDistance = Math.hypot(dx, dy);
+          pinchStartScale = summaryZoomScale;
+        }
+      },
+      { passive: true }
+    );
+    summaryTableWrap.addEventListener(
+      "touchmove",
+      (ev) => {
+        if (ev.touches.length === 2 && pinchStartDistance > 0) {
+          const dx = ev.touches[0].clientX - ev.touches[1].clientX;
+          const dy = ev.touches[0].clientY - ev.touches[1].clientY;
+          const distance = Math.hypot(dx, dy);
+          const ratio = distance / pinchStartDistance;
+          applySummaryZoom(pinchStartScale * ratio);
+          ev.preventDefault();
+        }
+      },
+      { passive: false }
+    );
+  }
+
+  function handleAiAsk() {
+    if (!summaryAiAnswer) return;
+    const q = summaryAiInput ? summaryAiInput.value : "";
+    summaryAiAnswer.textContent = answerSummaryQuestion(q);
+  }
+  if (summaryAiAskBtn) {
+    summaryAiAskBtn.addEventListener("click", handleAiAsk);
+  }
+  if (summaryAiInput) {
+    summaryAiInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        handleAiAsk();
+      }
     });
   }
 
@@ -935,6 +1147,8 @@ function setupEvents() {
       refreshRecipients();
     }
   };
+
+  applySummaryZoom(1);
 }
 
 window.addEventListener("DOMContentLoaded", () => {

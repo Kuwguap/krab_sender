@@ -284,6 +284,39 @@
         max-height: calc(100vh - 5.5rem) !important;
       }
 
+      .summary-zoom-controls {
+        display: inline-flex;
+        gap: 0.35rem;
+        align-items: center;
+      }
+
+      .summary-zoom-controls .secondary {
+        padding: 0.25rem 0.6rem;
+        font-size: 0.74rem;
+      }
+
+      .summary-ai {
+        margin-top: 0.7rem;
+        padding: 0.6rem;
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem;
+        background: rgba(2, 6, 23, 0.55);
+      }
+
+      .summary-ai .field-row {
+        margin-bottom: 0.35rem;
+      }
+
+      .summary-ai input[type="text"] {
+        flex: 1;
+        border-radius: 999px;
+        padding: 0.42rem 0.75rem;
+        border: 1px solid var(--border-subtle);
+        background: rgba(15, 23, 42, 0.85);
+        color: var(--text-main);
+        font-size: 0.83rem;
+      }
+
       table {
         width: 100%;
         min-width: 680px;
@@ -584,6 +617,11 @@
                       ⤢
                       <span>Expand</span>
                     </button>
+                    <span class="summary-zoom-controls">
+                      <button id="summary-zoom-out-btn" class="secondary" type="button">－</button>
+                      <button id="summary-zoom-reset-btn" class="secondary" type="button">100%</button>
+                      <button id="summary-zoom-in-btn" class="secondary" type="button">＋</button>
+                    </span>
                   </div>
                 </div>
                 <div id="summary-meta" class="small">
@@ -661,6 +699,47 @@
                         </tr>
                       </tbody>
                     </table>
+                  </div>
+                </div>
+                <div style="margin-top: 0.75rem">
+                  <div class="panel-title" style="margin-bottom: 0.35rem">
+                    Summary Per Issuer
+                  </div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Issuer</th>
+                          <th>@Username</th>
+                          <th>Transmissions</th>
+                          <th>Delivered</th>
+                          <th>Pending</th>
+                          <th>Failed</th>
+                          <th>Drivers</th>
+                        </tr>
+                      </thead>
+                      <tbody id="summary-issuer-tbody">
+                        <tr>
+                          <td colspan="7" class="muted">
+                            Generate a summary to view per-issuer totals.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="summary-ai">
+                  <div class="panel-title" style="margin-bottom: 0.35rem">AI Data Q&A</div>
+                  <div class="field-row">
+                    <input
+                      type="text"
+                      id="summary-ai-input"
+                      placeholder="Ask: how many issuers made transactions today?"
+                    />
+                    <button id="summary-ai-ask-btn" type="button">Ask</button>
+                  </div>
+                  <div id="summary-ai-answer" class="small">
+                    Ask questions about current summary data.
                   </div>
                 </div>
               </div>
