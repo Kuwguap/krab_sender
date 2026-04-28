@@ -2,8 +2,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from zoneinfo import ZoneInfo
+import os
 
 from pydantic import BaseModel
+import httpx
 
 from .config import ApiConfig
 from .db import init_db
@@ -244,6 +246,11 @@ class RecipientCreate(BaseModel):
     email: str
 
 
+class SummaryAiAskRequest(BaseModel):
+    question: str
+    summary: dict
+
+
 @app.get("/recipients/all", dependencies=[Depends(require_admin)])
 def recipients_all():
     """
@@ -284,6 +291,91 @@ def options_recipients_all():
 @app.options("/transactions/public")
 def options_transactions_public():
     return {}
+
+
+@app.post("/ai/summary-ask", dependencies=[Depends(require_admin)])
+async def ai_summary_ask(payload: SummaryAiAskRequest):
+    """
+    Ask GPT-5 questions about currently loaded summary data.
+    """
+    question = (payload.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required")
+
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=503, detail="OPENAI_API_KEY is not configured on server"
+        )
+
+    # Forward-step validation: only answer from summary data passed by client.
+    summary = payload.summary or {}
+    items = summary.get("items") if isinstance(summary, dict) else None
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="Invalid summary payload")
+
+    # Keep payload bounded to avoid very large prompts.
+    compact_items = items[:300]
+    compact_summary = {
+        "period_start_ny": summary.get("period_start_ny"),
+        "period_end_ny": summary.get("period_end_ny"),
+        "total_transactions": summary.get("total_transactions"),
+        "delivered": summary.get("delivered"),
+        "pending": summary.get("pending"),
+        "failed": summary.get("failed"),
+        "items": compact_items,
+    }
+
+    prompt = (
+        "You are a data assistant for a logistics dashboard. "
+        "Answer ONLY from the provided JSON summary data. "
+        "If data is insufficient, say so briefly.\n\n"
+        f"Question: {question}\n\n"
+        f"Summary JSON: {compact_summary}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            res = await client.post(
+                "https://api.openai.com/v1/responses",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-5",
+                    "input": prompt,
+                    "max_output_tokens": 220,
+                },
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI request failed: {e}")
+
+    if res.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI API error: HTTP {res.status_code}",
+        )
+
+    data = res.json()
+    answer = (data.get("output_text") or "").strip()
+    if not answer:
+        # Fallback parsing for alternate response structures.
+        try:
+            out = data.get("output") or []
+            parts = []
+            for block in out:
+                for c in block.get("content") or []:
+                    txt = c.get("text")
+                    if txt:
+                        parts.append(txt)
+            answer = "\n".join(parts).strip()
+        except Exception:
+            answer = ""
+
+    if not answer:
+        answer = "I could not generate an answer from the current summary data."
+    return {"answer": answer}
 
 
 # Serve a simple static admin dashboard at /admin

@@ -536,6 +536,37 @@ function answerSummaryQuestion(question) {
   return "I can answer questions like: 'how many issuers made transactions today?' or 'how many does haru have?'";
 }
 
+async function askSummaryWithGpt(question) {
+  if (!lastSummary || !Array.isArray(lastSummary.items)) {
+    return "Generate summary first so I can analyze the data.";
+  }
+  const q = String(question || "").trim();
+  if (!q) {
+    return "Please ask a question.";
+  }
+  const payload = {
+    question: q,
+    summary: {
+      period_start_ny: lastSummary.period_start_ny,
+      period_end_ny: lastSummary.period_end_ny,
+      total_transactions: lastSummary.total_transactions,
+      delivered: lastSummary.delivered,
+      pending: lastSummary.pending,
+      failed: lastSummary.failed,
+      items: (lastSummary.items || []).slice(0, 300),
+    },
+  };
+  const res = await requestWithAdminJson("/ai/summary-ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    return `AI unavailable (${res.error || "request failed"}).`;
+  }
+  return (res.data && res.data.answer) || "No answer returned.";
+}
+
 function downloadSummaryCsv() {
   if (!lastSummary || !lastSummary.items || lastSummary.items.length === 0) {
     alert("No summary data to download. Generate a summary first.");
@@ -979,10 +1010,21 @@ function setupEvents() {
     );
   }
 
-  function handleAiAsk() {
+  async function handleAiAsk() {
     if (!summaryAiAnswer) return;
     const q = summaryAiInput ? summaryAiInput.value : "";
-    summaryAiAnswer.textContent = answerSummaryQuestion(q);
+    summaryAiAnswer.textContent = "Thinking...";
+    try {
+      // Use GPT answer first; keep deterministic local fallback for resiliency.
+      const ai = await askSummaryWithGpt(q);
+      if (ai && !String(ai).startsWith("AI unavailable")) {
+        summaryAiAnswer.textContent = ai;
+        return;
+      }
+      summaryAiAnswer.textContent = answerSummaryQuestion(q);
+    } catch {
+      summaryAiAnswer.textContent = answerSummaryQuestion(q);
+    }
   }
   if (summaryAiAskBtn) {
     summaryAiAskBtn.addEventListener("click", handleAiAsk);
@@ -992,17 +1034,6 @@ function setupEvents() {
       if (ev.key === "Enter") {
         handleAiAsk();
       }
-    });
-  }
-
-  if (summaryExpandBtn) {
-    summaryExpandBtn.addEventListener("click", () => {
-      const wrapper = document.getElementById("summary-table-wrapper");
-      if (!wrapper) return;
-      const expanded = wrapper.classList.toggle("expanded");
-      summaryExpandBtn.innerHTML = expanded
-        ? "🗕<span>Collapse</span>"
-        : "⤢<span>Expand</span>";
     });
   }
 
