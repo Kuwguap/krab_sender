@@ -331,7 +331,7 @@ let lastSummary = null;
 let summaryZoomScale = 1;
 
 function clampSummaryZoom(next) {
-  return Math.max(0.7, Math.min(2.5, next));
+  return Math.max(0.25, Math.min(2.5, next));
 }
 
 function applySummaryZoom(scale) {
