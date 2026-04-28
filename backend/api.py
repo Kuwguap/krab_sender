@@ -249,6 +249,7 @@ class RecipientCreate(BaseModel):
 class SummaryAiAskRequest(BaseModel):
     question: str
     summary: dict
+    window: str | None = None
 
 
 def _fallback_summary_answer(question: str, items: list[dict]) -> str:
@@ -327,21 +328,25 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
             status_code=503, detail="OPENAI_API_KEY is not configured on server"
         )
 
-    # Forward-step validation: only answer from summary data passed by client.
-    summary = payload.summary or {}
-    items = summary.get("items") if isinstance(summary, dict) else None
+    # Forward-step validation + data access: fetch server-side for selected window.
+    mapping = {"1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365, "all": None}
+    requested_window = (payload.window or "1w").lower()
+    days = mapping.get(requested_window, 7)
+    full_summary = get_rolling_summary_ny(days=days, max_items=None)
+    items = full_summary.get("items") or []
     if not isinstance(items, list):
-        raise HTTPException(status_code=400, detail="Invalid summary payload")
+        items = []
 
-    # Keep payload bounded to avoid very large prompts.
-    compact_items = items[:300]
+    # Bound prompt size while still using server-fetched data.
+    compact_items = items[:1500]
     compact_summary = {
-        "period_start_ny": summary.get("period_start_ny"),
-        "period_end_ny": summary.get("period_end_ny"),
-        "total_transactions": summary.get("total_transactions"),
-        "delivered": summary.get("delivered"),
-        "pending": summary.get("pending"),
-        "failed": summary.get("failed"),
+        "window": requested_window,
+        "period_start_ny": full_summary.get("period_start_ny"),
+        "period_end_ny": full_summary.get("period_end_ny"),
+        "total_transactions": full_summary.get("total_transactions"),
+        "delivered": full_summary.get("delivered"),
+        "pending": full_summary.get("pending"),
+        "failed": full_summary.get("failed"),
         "items": compact_items,
     }
 
@@ -401,7 +406,7 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
             answer = ""
 
     if not answer:
-        answer = _fallback_summary_answer(question, compact_items)
+        answer = _fallback_summary_answer(question, items)
     return {"answer": answer}
 
 

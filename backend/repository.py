@@ -123,7 +123,9 @@ def get_latest_transaction() -> Optional[Transaction]:
 
 
 def get_rolling_summary_ny(
-    days: Optional[int] = 7, reference_utc: Optional[datetime] = None
+    days: Optional[int] = 7,
+    reference_utc: Optional[datetime] = None,
+    max_items: Optional[int] = 5000,
 ) -> dict:
     """
     Build a summary for the last `days` days in America/New_York time.
@@ -153,8 +155,6 @@ def get_rolling_summary_ny(
 
     # Cap row payload for the dashboard: large windows (e.g. 6m) used to load every
     # ORM row and OOM/timeout on Render, which surfaced as 502/CORS in the browser.
-    max_items = 5000
-
     with get_session() as session:
         base = session.query(TransactionORM).filter(
             TransactionORM.timestamp_utc <= end_utc
@@ -192,9 +192,10 @@ def get_rolling_summary_ny(
         group_counts["sensei_group"]["sent"] = max(0, delivered - highkage_sent)
 
         # Most-recent N rows for the table (chronological within the cap).
-        rows: List[TransactionORM] = (
-            base.order_by(TransactionORM.timestamp_utc.desc()).limit(max_items).all()
-        )
+        row_query = base.order_by(TransactionORM.timestamp_utc.desc())
+        if max_items is not None:
+            row_query = row_query.limit(max_items)
+        rows: List[TransactionORM] = row_query.all()
         rows = list(reversed(rows))
 
         items = [
@@ -222,7 +223,7 @@ def get_rolling_summary_ny(
         "failed": failed,
         "group_counts": group_counts,
         "items": items,
-        "items_omitted": max(0, total - max_items),
+        "items_omitted": max(0, total - max_items) if max_items is not None else 0,
     }
 
     return summary

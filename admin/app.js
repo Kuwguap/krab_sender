@@ -567,6 +567,10 @@ async function askSummaryWithGpt(question) {
   }
   const payload = {
     question: q,
+    window:
+      (document.getElementById("summary-window") &&
+        document.getElementById("summary-window").value) ||
+      "1w",
     summary: {
       period_start_ny: lastSummary.period_start_ny,
       period_end_ny: lastSummary.period_end_ny,
