@@ -330,6 +330,59 @@ async function refreshLatest() {
 let lastSummary = null;
 let summaryZoomScale = 1;
 const summaryAiHistory = [];
+const SUMMARY_AI_HISTORY_KEY = "krab_summary_ai_history";
+
+function loadSummaryAiHistory() {
+  try {
+    const raw = sessionStorage.getItem(SUMMARY_AI_HISTORY_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      summaryAiHistory.length = 0;
+      for (const m of parsed.slice(-20)) {
+        if (!m || !m.role || !m.content) continue;
+        summaryAiHistory.push({
+          role: String(m.role),
+          content: String(m.content),
+        });
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function saveSummaryAiHistory() {
+  try {
+    sessionStorage.setItem(
+      SUMMARY_AI_HISTORY_KEY,
+      JSON.stringify(summaryAiHistory.slice(-20))
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function renderSummaryAiLog() {
+  const log = document.getElementById("summary-ai-log");
+  if (!log) return;
+  log.innerHTML = "";
+  if (!summaryAiHistory.length) {
+    const div = document.createElement("div");
+    div.className = "summary-ai-msg assistant";
+    div.textContent = "Ask questions about current summary data.";
+    log.appendChild(div);
+    return;
+  }
+  for (const m of summaryAiHistory.slice(-16)) {
+    const div = document.createElement("div");
+    div.className =
+      "summary-ai-msg " + (m.role === "user" ? "user" : "assistant");
+    div.textContent = m.content;
+    log.appendChild(div);
+  }
+  log.scrollTop = log.scrollHeight;
+}
 
 function clampSummaryZoom(next) {
   return Math.max(0.35, Math.min(2.5, next));
@@ -534,6 +587,10 @@ function answerSummaryQuestion(question) {
 
   if (q.includes("total")) {
     return `Total transactions in this summary: ${items.length}.`;
+  }
+
+  if (q.includes("how are you") || q.includes("how you doing")) {
+    return "I am doing great and ready to help with your dashboard data. 😊";
   }
 
   if (
@@ -945,6 +1002,8 @@ function setupEvents() {
   const summaryAiInput = document.getElementById("summary-ai-input");
   const summaryAiAskBtn = document.getElementById("summary-ai-ask-btn");
   const summaryAiAnswer = document.getElementById("summary-ai-answer");
+  loadSummaryAiHistory();
+  renderSummaryAiLog();
 
   async function doLogin() {
     const pw = input.value.trim();
@@ -1083,16 +1142,33 @@ function setupEvents() {
       summaryAiAnswer.textContent = "Please enter a question.";
       return;
     }
+    // Forward-step validation: if summary is missing, try to load it first.
+    if (!lastSummary || !Array.isArray(lastSummary.items)) {
+      try {
+        await refreshSummary();
+      } catch {
+        // continue to fallback messaging below
+      }
+    }
     summaryAiAnswer.textContent = "Thinking...";
     summaryAiHistory.push({ role: "user", content: String(q) });
+    saveSummaryAiHistory();
+    renderSummaryAiLog();
     try {
       const ai = await askSummaryWithGpt(q);
       summaryAiAnswer.textContent = ai;
       summaryAiHistory.push({ role: "assistant", content: String(ai) });
+      saveSummaryAiHistory();
+      renderSummaryAiLog();
     } catch {
       const msg = "AI unavailable right now. Please try again.";
       summaryAiAnswer.textContent = msg;
       summaryAiHistory.push({ role: "assistant", content: msg });
+      saveSummaryAiHistory();
+      renderSummaryAiLog();
+    }
+    if (summaryAiInput) {
+      summaryAiInput.value = "";
     }
   }
   if (summaryAiAskBtn) {
