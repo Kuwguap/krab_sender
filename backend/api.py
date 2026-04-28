@@ -253,25 +253,41 @@ class SummaryAiAskRequest(BaseModel):
     history: list[dict] | None = None
 
 
-def _fallback_summary_answer(question: str, items: list[dict]) -> str:
-    q = (question or "").strip().lower()
-    if not items:
-        return "There are no rows in the current summary window."
+def _extract_openai_answer(data: dict) -> str:
+    if not isinstance(data, dict):
+        return ""
+    direct = data.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
 
-    if ("which issuer" in q or "who" in q) and (
-        "most" in q or "highest" in q or "top" in q
-    ):
-        counts: dict[str, int] = {}
-        for it in items:
-            issuer = str(it.get("telegram_name") or "Unknown").strip() or "Unknown"
-            counts[issuer] = counts.get(issuer, 0) + 1
-        top_issuer = max(counts, key=counts.get)
-        return f"{top_issuer} has the most transactions: {counts[top_issuer]}."
+    output = data.get("output") or []
+    if not isinstance(output, list):
+        return ""
 
-    if "total" in q:
-        return f"Total transactions in this summary: {len(items)}."
+    parts: list[str] = []
+    for block in output:
+        if not isinstance(block, dict):
+            continue
+        content = block.get("content") or []
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            txt = item.get("text")
+            if isinstance(txt, str) and txt.strip():
+                parts.append(txt.strip())
+                continue
+            if isinstance(txt, dict):
+                maybe = txt.get("value") or txt.get("text")
+                if isinstance(maybe, str) and maybe.strip():
+                    parts.append(maybe.strip())
+                    continue
+            maybe = item.get("value") or item.get("output_text")
+            if isinstance(maybe, str) and maybe.strip():
+                parts.append(maybe.strip())
 
-    return "I could not generate an answer from the current summary data."
+    return "\n".join(parts).strip()
 
 
 @app.get("/recipients/all", dependencies=[Depends(require_admin)])
@@ -335,7 +351,14 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
     mapping = {"1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365, "all": None}
     requested_window = (payload.window or "1w").lower()
     days = mapping.get(requested_window, 7)
-    full_summary = get_rolling_summary_ny(days=days, max_items=None)
+    try:
+        full_summary = get_rolling_summary_ny(days=days, max_items=None)
+    except TypeError:
+        # Backward compatibility if repository signature differs on some deploys.
+        full_summary = get_rolling_summary_ny(days=days)
+    except Exception:
+        # Never hard-fail AI chat due to summary load issues; use client-provided data.
+        full_summary = payload.summary or {}
     items = full_summary.get("items") or []
     if not isinstance(items, list):
         items = []
@@ -361,13 +384,14 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
         if role in {"user", "assistant"} and content:
             compact_history.append({"role": role, "content": content[:1000]})
 
-    prompt = (
-        "You are a friendly analytics copilot for a logistics dashboard.\n"
-        "Use ONLY the provided summary JSON data for factual claims.\n"
-        "Give the best possible answer from available data, including calculated totals, rankings, and comparisons.\n"
-        "If some requested detail is missing, say what is available and offer the closest useful answer.\n"
-        "Never reply with the exact phrase: 'Insufficient data to answer from the provided summary.'\n"
-        "Keep responses concise and practical.\n\n"
+    system_prompt = (
+        "You are a friendly analytics copilot for a logistics dashboard. "
+        "For data questions, use ONLY the provided summary JSON for factual claims. "
+        "For normal conversation (like greetings or 'how are you'), respond naturally as a friendly assistant. "
+        "If some specific detail is missing in data, provide the closest useful answer from available fields. "
+        "Keep responses concise and practical."
+    )
+    user_prompt = (
         f"Conversation history: {compact_history}\n\n"
         f"Question: {question}\n\n"
         f"Summary JSON: {compact_summary}"
@@ -383,7 +407,10 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
                 },
                 json={
                     "model": "gpt-5",
-                    "input": prompt,
+                    "input": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
                     "max_output_tokens": 220,
                 },
             )
@@ -396,35 +423,19 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
             detail=f"OpenAI API error: HTTP {res.status_code}",
         )
 
-    data = res.json()
-    answer = (data.get("output_text") or "").strip()
-    if not answer:
-        # Fallback parsing for alternate response structures.
-        try:
-            out = data.get("output") or []
-            parts = []
-            for block in out:
-                for c in block.get("content") or []:
-                    txt = c.get("text")
-                    if isinstance(txt, str) and txt.strip():
-                        parts.append(txt.strip())
-                    elif isinstance(txt, dict):
-                        val = txt.get("value") or txt.get("text")
-                        if isinstance(val, str) and val.strip():
-                            parts.append(val.strip())
-                    elif c.get("type") == "output_text":
-                        val = c.get("value") or c.get("text")
-                        if isinstance(val, str) and val.strip():
-                            parts.append(val.strip())
-            answer = "\n".join(parts).strip()
-        except Exception:
-            answer = ""
+    try:
+        data = res.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI invalid JSON: {e}")
+    answer = _extract_openai_answer(data)
 
     if not answer:
-        retry_prompt = (
-            "Provide a best-effort answer from this summary data. "
-            "If exact value is unavailable, return the nearest useful metric and why.\n\n"
-            f"Question: {question}\n\nSummary JSON: {compact_summary}"
+        retry_user_prompt = (
+            "Answer the question directly. "
+            "If it is general conversation, respond conversationally. "
+            "If it is data-related, rely on summary JSON.\n\n"
+            f"Question: {question}\n\n"
+            f"Summary JSON: {compact_summary}"
         )
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
@@ -436,19 +447,33 @@ async def ai_summary_ask(payload: SummaryAiAskRequest):
                     },
                     json={
                         "model": "gpt-5",
-                        "input": retry_prompt,
+                        "input": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": retry_user_prompt},
+                        ],
                         "max_output_tokens": 220,
                     },
                 )
-            if retry.status_code < 400:
-                retry_data = retry.json()
-                answer = (retry_data.get("output_text") or "").strip()
-        except Exception:
-            answer = ""
+            if retry.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"OpenAI retry API error: HTTP {retry.status_code}",
+                )
+            retry_data = retry.json()
+            answer = _extract_openai_answer(retry_data)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"OpenAI retry failed: {e}")
 
     if not answer:
-        answer = _fallback_summary_answer(question, items)
+        raise HTTPException(status_code=502, detail="OpenAI returned empty answer")
     return {"answer": answer}
+
+
+@app.options("/ai/summary-ask")
+def options_ai_summary_ask():
+    return {}
 
 
 # Serve a simple static admin dashboard at /admin

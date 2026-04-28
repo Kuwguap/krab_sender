@@ -385,7 +385,7 @@ function renderSummaryAiLog() {
 }
 
 function clampSummaryZoom(next) {
-  return Math.max(0.35, Math.min(2.5, next));
+  return Math.max(0.05, Math.min(2.5, next));
 }
 
 function applySummaryZoom(scale) {
@@ -415,7 +415,7 @@ function renderSummaryTable(summary) {
   if (items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 9;
+    td.colSpan = 10;
     td.className = "muted";
     td.textContent = "No transmissions in this summary window.";
     tr.appendChild(td);
@@ -424,6 +424,11 @@ function renderSummaryTable(summary) {
   }
 
   const sorted = [...items].sort((a, b) => parseItemTimeMs(b) - parseItemTimeMs(a));
+  const issuerHandleCounts = {};
+  for (const it of sorted) {
+    const handle = normalizeHandle(it.telegram_handle) || "__unknown__";
+    issuerHandleCounts[handle] = (issuerHandleCounts[handle] || 0) + 1;
+  }
 
   for (let i = 0; i < sorted.length; i += 1) {
     const it = sorted[i];
@@ -469,6 +474,11 @@ function renderSummaryTable(summary) {
     statusPill.textContent = status || "UNKNOWN";
     tdStatus.appendChild(statusPill);
     tr.appendChild(tdStatus);
+
+    const tdCount = document.createElement("td");
+    const handleKey = normalizeHandle(it.telegram_handle) || "__unknown__";
+    tdCount.textContent = String(issuerHandleCounts[handleKey] || 0);
+    tr.appendChild(tdCount);
 
     const tdIssuerHandle = document.createElement("td");
     tdIssuerHandle.textContent = formatHandleWithAt(it.telegram_handle) || "—";
@@ -667,10 +677,17 @@ function downloadSummaryCsv() {
       "DriverName",
       "Success",
       "Status",
+      "Count",
       "IssuerUsername",
       "DriverEmail",
     ],
   ];
+
+  const issuerHandleCounts = {};
+  for (const it of lastSummary.items) {
+    const handle = normalizeHandle(it.telegram_handle) || "__unknown__";
+    issuerHandleCounts[handle] = (issuerHandleCounts[handle] || 0) + 1;
+  }
 
   for (let i = 0; i < lastSummary.items.length; i += 1) {
     const it = lastSummary.items[i];
@@ -682,6 +699,7 @@ function downloadSummaryCsv() {
       it.recipient_name || "Not recorded",
       (it.delivery_status || "").toUpperCase() === "DELIVERED" ? "YES" : "NO",
       (it.delivery_status || "").toUpperCase() || "UNKNOWN",
+      issuerHandleCounts[normalizeHandle(it.telegram_handle) || "__unknown__"] || 0,
       formatHandleWithAt(it.telegram_handle),
       it.recipient_email || "",
     ]);
